@@ -1,14 +1,15 @@
 <script setup>
 /**
  * EventCard — bottom sheet that opens when a pin is tapped.
- * Shows event details, the live guestlist, and the Join / RSVP action.
- * RSVPs auto-close (button disabled) once max capacity is reached.
+ * Details, cover photo, countdown, share/directions, the live guestlist
+ * with waitlist, the Join / RSVP action, and the event chat thread.
  */
-import { computed, ref } from 'vue'
+import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useChatStore } from '@/stores/chatStore'
 import { categoryOf } from '@/config/categories'
-import { formatWhen, formatDuration, isLive } from '@/utils/datetime'
+import { formatWhen, formatDuration, formatCountdown, formatTime, isLive } from '@/utils/datetime'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
 
 const props = defineProps({
@@ -19,42 +20,72 @@ const emit = defineEmits(['close', 'edit', 'login-required'])
 
 const eventStore = useEventStore()
 const authStore = useAuthStore()
+const chatStore = useChatStore()
+
 const busy = ref(false)
 const error = ref('')
 const confirmingCancel = ref(false)
+const shareLabel = ref('Share')
+const chatOpen = ref(false)
+const chatDraft = ref('')
+const chatBody = ref(null)
 
 const category = computed(() => categoryOf(props.event.category))
 const live = computed(() => isLive(props.event))
+const countdown = computed(() => (live.value ? '' : formatCountdown(props.event.startsAt)))
 const full = computed(() => eventStore.isFull(props.event))
 const spotsLeft = computed(() => eventStore.spotsLeft(props.event))
 
-const isHost = computed(() => props.event.hostId === authStore.currentUser?.id)
-const isAttending = computed(() =>
-  props.event.attendeeIds.includes(authStore.currentUser?.id)
-)
+const meId = computed(() => authStore.currentUser?.id)
+const isHost = computed(() => props.event.hostId === meId.value)
+const isAttending = computed(() => props.event.attendeeIds.includes(meId.value))
+const isWaitlisted = computed(() => eventStore.isWaitlisted(props.event, meId.value))
+const waitlistPos = computed(() => eventStore.waitlistPosition(props.event, meId.value))
+const canChat = computed(() => isHost.value || isAttending.value || isWaitlisted.value)
 
 const host = computed(
   () =>
-    eventStore.memberById(props.event.hostId) || {
+    eventStore.memberById(props.event.hostId) ||
+    (props.event.hostId === meId.value ? authStore.currentUser : null) || {
       name: 'Member',
       initials: 'M',
       avatarColor: '#94a3b8'
     }
 )
 
-const guests = computed(() =>
-  props.event.attendeeIds
-    .map(
-      (id) =>
-        eventStore.memberById(id) ||
-        (id === authStore.currentUser?.id ? authStore.currentUser : null)
-    )
-    .filter(Boolean)
-)
+function resolveMember(id) {
+  return (
+    eventStore.memberById(id) ||
+    (id === meId.value ? authStore.currentUser : null) || {
+      id,
+      name: 'Member',
+      initials: 'M',
+      avatarColor: '#94a3b8'
+    }
+  )
+}
+
+const guests = computed(() => props.event.attendeeIds.map(resolveMember))
 
 const capacityPct = computed(() =>
   Math.min(100, (props.event.attendeeIds.length / props.event.maxCapacity) * 100)
 )
+
+const shareUrl = computed(
+  () => `${location.origin}${location.pathname}#/e/${props.event.id}`
+)
+
+const directionsUrl = computed(
+  () =>
+    `https://www.google.com/maps/dir/?api=1&destination=${props.event.lat},${props.event.lng}`
+)
+
+const whatsappUrl = computed(
+  () =>
+    `https://wa.me/?text=${encodeURIComponent(`${props.event.title} — ${formatWhen(props.event.startsAt)} 📍 ${props.event.locationName}\n${shareUrl.value}`)}`
+)
+
+/* --- join / waitlist ------------------------------------------------------ */
 
 async function toggleRsvp() {
   if (busy.value) return
@@ -66,10 +97,10 @@ async function toggleRsvp() {
   busy.value = true
   error.value = ''
   try {
-    if (isAttending.value) {
-      await eventStore.cancelRsvp(props.event.id, authStore.currentUser.id)
+    if (isAttending.value || isWaitlisted.value) {
+      await eventStore.cancelRsvp(props.event.id, meId.value)
     } else {
-      await eventStore.rsvp(props.event.id, authStore.currentUser.id)
+      await eventStore.smartJoin(props.event.id, meId.value)
     }
   } catch (e) {
     error.value = e.message
@@ -95,10 +126,86 @@ async function cancelEvent() {
     busy.value = false
   }
 }
+
+/* --- share ---------------------------------------------------------------- */
+
+async function share() {
+  const payload = {
+    title: props.event.title,
+    text: `${props.event.title} — ${formatWhen(props.event.startsAt)} at ${props.event.locationName}`,
+    url: shareUrl.value
+  }
+  try {
+    if (navigator.share) {
+      await navigator.share(payload)
+      return
+    }
+  } catch {
+    return // user dismissed the share sheet
+  }
+  try {
+    await navigator.clipboard.writeText(shareUrl.value)
+    shareLabel.value = 'Link copied!'
+  } catch {
+    shareLabel.value = shareUrl.value // last resort: show it
+  }
+  setTimeout(() => (shareLabel.value = 'Share'), 2500)
+}
+
+/* --- chat ----------------------------------------------------------------- */
+
+async function toggleChat() {
+  chatOpen.value = !chatOpen.value
+  if (chatOpen.value) {
+    await chatStore.open(props.event.id)
+    scrollChat()
+  } else {
+    chatStore.close()
+  }
+}
+
+async function sendChat() {
+  if (!chatDraft.value.trim()) return
+  try {
+    await chatStore.send(authStore.currentUser, chatDraft.value)
+    chatDraft.value = ''
+    scrollChat()
+  } catch (e) {
+    error.value = e.message
+  }
+}
+
+async function scrollChat() {
+  await nextTick()
+  if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight
+}
+
+watch(
+  () => props.event.id,
+  async (id) => {
+    confirmingCancel.value = false
+    error.value = ''
+    if (chatOpen.value) {
+      await chatStore.open(id)
+      scrollChat()
+    }
+  }
+)
+
+watch(
+  () => chatStore.messages.length,
+  () => {
+    if (chatOpen.value) scrollChat()
+  }
+)
+
+onBeforeUnmount(() => chatStore.close())
 </script>
 
 <template>
   <article class="event-card glass-panel">
+    <img v-if="event.coverUrl" :src="event.coverUrl" class="event-card__cover" alt="" />
+
     <button class="event-card__close" aria-label="Close" @click="emit('close')">✕</button>
 
     <header class="event-card__header">
@@ -106,6 +213,7 @@ async function cancelEvent() {
         {{ category.label }}
       </span>
       <span v-if="live" class="event-card__live">● LIVE NOW</span>
+      <span v-else-if="countdown" class="event-card__countdown">⏱ {{ countdown }}</span>
       <h2 class="event-card__title">{{ event.title }}</h2>
       <p class="event-card__meta">
         📍 {{ event.locationName }} &nbsp;·&nbsp; 🕐 {{ formatWhen(event.startsAt) }}
@@ -114,6 +222,12 @@ async function cancelEvent() {
     </header>
 
     <p class="event-card__description">{{ event.description }}</p>
+
+    <div class="event-card__share-row">
+      <button class="event-card__mini" @click="share">🔗 {{ shareLabel }}</button>
+      <a class="event-card__mini" :href="whatsappUrl" target="_blank" rel="noopener">💬 WhatsApp</a>
+      <a class="event-card__mini" :href="directionsUrl" target="_blank" rel="noopener">🧭 Directions</a>
+    </div>
 
     <div class="event-card__host">
       <MemberAvatar :member="host" :size="34" />
@@ -127,7 +241,10 @@ async function cancelEvent() {
       <div class="event-card__guestlist-head">
         <span>Guestlist · {{ event.attendeeIds.length }}/{{ event.maxCapacity }}</span>
         <span :class="['event-card__spots', { 'event-card__spots--full': full }]">
-          {{ full ? 'RSVPs closed — full' : `${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} left` }}
+          <template v-if="full">
+            Full{{ event.waitlistIds?.length ? ` · ${event.waitlistIds.length} waiting` : '' }}
+          </template>
+          <template v-else>{{ spotsLeft }} spot{{ spotsLeft === 1 ? '' : 's' }} left</template>
         </span>
       </div>
       <div class="event-card__capacity">
@@ -147,19 +264,77 @@ async function cancelEvent() {
       </div>
     </section>
 
+    <!-- Chat -->
+    <section class="event-card__chat">
+      <button class="event-card__chat-toggle" @click="toggleChat">
+        💬 Event chat
+        <span v-if="chatStore.eventId === event.id" class="event-card__chat-count">
+          {{ chatStore.messages.length }}
+        </span>
+        <span class="event-card__chat-caret">{{ chatOpen ? '▾' : '▸' }}</span>
+      </button>
+      <div v-if="chatOpen" class="event-card__chat-body-wrap">
+        <div ref="chatBody" class="event-card__chat-body">
+          <p v-if="chatStore.loading" class="event-card__chat-empty">Loading…</p>
+          <p v-else-if="!chatStore.messages.length" class="event-card__chat-empty">
+            No messages yet — say salam! 👋
+          </p>
+          <div v-for="message in chatStore.messages" :key="message.id" class="event-card__msg">
+            <MemberAvatar :member="resolveMember(message.userId)" :size="26" />
+            <div class="event-card__msg-body">
+              <span class="event-card__msg-head">
+                <strong>{{ resolveMember(message.userId).name }}</strong>
+                <span class="event-card__msg-time">{{ formatTime(message.at) }}</span>
+              </span>
+              <span class="event-card__msg-text">{{ message.text }}</span>
+            </div>
+          </div>
+        </div>
+        <form v-if="canChat" class="event-card__chat-form" @submit.prevent="sendChat">
+          <input
+            v-model="chatDraft"
+            class="field-input event-card__chat-input"
+            type="text"
+            maxlength="500"
+            placeholder="Message the group…"
+          />
+          <button type="submit" class="btn-primary event-card__chat-send" :disabled="!chatDraft.trim()">
+            ➤
+          </button>
+        </form>
+        <p v-else class="event-card__chat-hint">Join the event to chat with the group.</p>
+      </div>
+    </section>
+
     <p v-if="error" class="event-card__error">{{ error }}</p>
 
     <footer class="event-card__actions">
-      <button
-        v-if="!isHost"
-        class="btn-primary event-card__join"
-        :disabled="busy || (full && !isAttending)"
-        @click="toggleRsvp"
-      >
-        <template v-if="isAttending">✓ Going — tap to cancel</template>
-        <template v-else-if="full">Event full</template>
-        <template v-else>Join · RSVP</template>
-      </button>
+      <template v-if="!isHost">
+        <button
+          v-if="isAttending"
+          class="btn-primary event-card__join"
+          :disabled="busy"
+          @click="toggleRsvp"
+        >
+          ✓ Going — tap to cancel
+        </button>
+        <button
+          v-else-if="isWaitlisted"
+          class="btn-ghost event-card__join"
+          :disabled="busy"
+          @click="toggleRsvp"
+        >
+          ⏳ On waitlist · #{{ waitlistPos }} — tap to leave
+        </button>
+        <button
+          v-else
+          class="btn-primary event-card__join"
+          :disabled="busy"
+          @click="toggleRsvp"
+        >
+          {{ full ? 'Join waitlist' : 'Join · RSVP' }}
+        </button>
+      </template>
       <template v-else>
         <div class="event-card__hosting">You're hosting this event 🎉</div>
         <div class="event-card__host-actions">
@@ -184,9 +359,18 @@ async function cancelEvent() {
 .event-card {
   position: relative;
   width: min(420px, calc(100vw - 24px));
-  max-height: min(72vh, 560px);
+  max-height: min(78vh, 640px);
   overflow-y: auto;
   padding: 22px;
+}
+
+.event-card__cover {
+  display: block;
+  width: calc(100% + 44px);
+  margin: -22px -22px 16px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .event-card__close {
@@ -196,9 +380,10 @@ async function cancelEvent() {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(17, 24, 39, 0.6);
   color: var(--text-secondary);
   font-size: 13px;
+  z-index: 1;
 }
 
 .event-card__close:hover {
@@ -232,6 +417,13 @@ async function cancelEvent() {
   }
 }
 
+.event-card__countdown {
+  margin-left: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--gold);
+}
+
 .event-card__title {
   margin-top: 12px;
   font-size: 21px;
@@ -255,11 +447,39 @@ async function cancelEvent() {
   opacity: 0.9;
 }
 
+.event-card__share-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.event-card__mini {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 9px 8px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.event-card__mini:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+
 .event-card__host {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 16px;
+  margin-top: 14px;
   padding: 10px 12px;
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.045);
@@ -316,6 +536,115 @@ async function cancelEvent() {
   gap: 6px;
   margin-top: 12px;
 }
+
+/* Chat --------------------------------------------------------------------- */
+
+.event-card__chat {
+  margin-top: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.event-card__chat-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 14px;
+  font-size: 13.5px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.event-card__chat-count {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(198, 45, 85, 0.3);
+  color: var(--text-primary);
+}
+
+.event-card__chat-caret {
+  margin-left: auto;
+  color: var(--text-secondary);
+}
+
+.event-card__chat-body {
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.event-card__chat-empty {
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+}
+
+.event-card__msg {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.event-card__msg-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.event-card__msg-head {
+  font-size: 12px;
+}
+
+.event-card__msg-head strong {
+  font-weight: 700;
+}
+
+.event-card__msg-time {
+  margin-left: 6px;
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+
+.event-card__msg-text {
+  font-size: 13.5px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.event-card__chat-form {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.event-card__chat-input {
+  flex: 1;
+  padding: 9px 12px;
+}
+
+.event-card__chat-send {
+  padding: 9px 16px;
+  font-size: 15px;
+}
+
+.event-card__chat-hint {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+/* Actions ------------------------------------------------------------------ */
 
 .event-card__error {
   margin-top: 12px;

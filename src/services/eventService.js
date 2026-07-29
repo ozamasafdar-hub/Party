@@ -1,16 +1,17 @@
-import { SEED_EVENTS, SEED_MEMBERS } from '@/data/seedData'
+import { SEED_EVENTS, SEED_MEMBERS, SEED_MESSAGES } from '@/data/seedData'
 import { supabase, isLive } from './supabaseClient'
 
 /**
  * Data-access layer with two backends behind one API:
  *
- *  - LIVE (Supabase configured): events/rsvps/profiles in Postgres, with
- *    realtime change streaming so every open map stays in sync.
+ *  - LIVE (Supabase configured): events/rsvps/profiles/messages in
+ *    Postgres, with realtime change streaming.
  *  - DEMO (no Supabase env): in-memory seed data plus a simulated activity
  *    feed, so the app works with zero backend setup.
  *
- * Realtime callbacks receive either incremental changes
- * ({type:'INSERT'|'UPDATE', event}) or a full snapshot ({type:'SYNC', events}).
+ * Event realtime callbacks receive incremental changes
+ * ({type:'INSERT'|'UPDATE', event}) or a full snapshot
+ * ({type:'SYNC', events}). Chat has its own per-event subscription.
  */
 
 /* ========================================================================== */
@@ -18,24 +19,44 @@ import { supabase, isLive } from './supabaseClient'
 /* ========================================================================== */
 
 const db = {
-  events: SEED_EVENTS.map((e) => ({ ...e, attendeeIds: [...e.attendeeIds] })),
-  members: [...SEED_MEMBERS]
+  events: SEED_EVENTS.map((e) => ({ ...e, attendeeIds: [...e.attendeeIds], waitlistIds: [] })),
+  members: [...SEED_MEMBERS],
+  messages: SEED_MESSAGES.map((m) => ({ ...m }))
 }
 
 const listeners = new Set()
+const messageListeners = new Set()
 
 function emit(change) {
   listeners.forEach((cb) => cb(change))
 }
 
+function emitMessage(message) {
+  messageListeners.forEach((cb) => cb({ ...message }))
+}
+
 function clone(event) {
-  return { ...event, attendeeIds: [...event.attendeeIds] }
+  return {
+    ...event,
+    attendeeIds: [...event.attendeeIds],
+    waitlistIds: [...(event.waitlistIds || [])]
+  }
 }
 
 function demoFind(eventId) {
   const event = db.events.find((e) => e.id === eventId)
   if (!event) throw new Error('Event not found')
   return event
+}
+
+/** When a "going" spot frees up, the longest-waiting member gets it. */
+function demoPromote(event) {
+  while (
+    event.waitlistIds.length &&
+    event.attendeeIds.length < event.maxCapacity
+  ) {
+    event.attendeeIds.push(event.waitlistIds.shift())
+  }
 }
 
 const demo = {
@@ -60,7 +81,9 @@ const demo = {
       startsAt: data.startsAt,
       durationMinutes: data.durationMinutes,
       maxCapacity: data.maxCapacity,
-      attendeeIds: [host.id]
+      coverUrl: data.coverDataUrl || null,
+      attendeeIds: [host.id],
+      waitlistIds: []
     }
     db.events.push(event)
     emit({ type: 'INSERT', event: clone(event) })
@@ -76,8 +99,10 @@ const demo = {
       locationName: data.locationName.trim(),
       startsAt: data.startsAt,
       durationMinutes: data.durationMinutes,
-      maxCapacity: data.maxCapacity
+      maxCapacity: data.maxCapacity,
+      ...(data.coverDataUrl ? { coverUrl: data.coverDataUrl } : {})
     })
+    demoPromote(event)
     emit({ type: 'UPDATE', event: clone(event) })
     return clone(event)
   },
@@ -94,7 +119,18 @@ const demo = {
     if (event.attendeeIds.length >= event.maxCapacity) {
       throw new Error('This event is already full')
     }
+    event.waitlistIds = event.waitlistIds.filter((id) => id !== userId)
     event.attendeeIds.push(userId)
+    emit({ type: 'UPDATE', event: clone(event) })
+    return clone(event)
+  },
+
+  async joinWaitlist(eventId, userId) {
+    const event = demoFind(eventId)
+    if (event.attendeeIds.includes(userId) || event.waitlistIds.includes(userId)) {
+      return clone(event)
+    }
+    event.waitlistIds.push(userId)
     emit({ type: 'UPDATE', event: clone(event) })
     return clone(event)
   },
@@ -103,6 +139,8 @@ const demo = {
     const event = demoFind(eventId)
     if (event.hostId === userId) throw new Error('Hosts cannot leave their own event')
     event.attendeeIds = event.attendeeIds.filter((id) => id !== userId)
+    event.waitlistIds = event.waitlistIds.filter((id) => id !== userId)
+    demoPromote(event)
     emit({ type: 'UPDATE', event: clone(event) })
     return clone(event)
   },
@@ -114,10 +152,43 @@ const demo = {
       listeners.delete(callback)
       clearInterval(timer)
     }
+  },
+
+  /* chat ------------------------------------------------------------------ */
+
+  async listMessages(eventId) {
+    return db.messages
+      .filter((m) => m.eventId === eventId)
+      .sort((a, b) => new Date(a.at) - new Date(b.at))
+      .map((m) => ({ ...m }))
+  },
+
+  async sendMessage(eventId, user, text) {
+    const message = {
+      id: `m-${Date.now().toString(36)}`,
+      eventId,
+      userId: user.id,
+      text: text.trim().slice(0, 500),
+      at: new Date().toISOString()
+    }
+    db.messages.push(message)
+    emitMessage(message)
+    return { ...message }
+  },
+
+  subscribeToMessages(eventId, callback) {
+    const filtered = (message) => {
+      if (message.eventId === eventId) callback(message)
+    }
+    messageListeners.add(filtered)
+    return () => messageListeners.delete(filtered)
   }
 }
 
-/** Demo-only: simulates other members RSVPing so the map feels live. */
+/**
+ * Demo-only: simulates other members RSVPing so the map feels live.
+ * Newest events first — a member's fresh event visibly attracts guests.
+ */
 function startActivitySimulator() {
   let tick = 0
   return setInterval(() => {
@@ -125,8 +196,10 @@ function startActivitySimulator() {
       (e) => !e.cancelled && e.attendeeIds.length < e.maxCapacity
     )
     if (!open.length) return
-    const event = open[tick % open.length]
-    const joiner = db.members.find((m) => !event.attendeeIds.includes(m.id))
+    const event = open[open.length - 1 - (tick % open.length)]
+    const joiner = db.members.find(
+      (m) => !event.attendeeIds.includes(m.id) && !event.waitlistIds.includes(m.id)
+    )
     tick += 1
     if (!joiner) return
     event.attendeeIds.push(joiner.id)
@@ -167,6 +240,10 @@ export function toMember(profile) {
 }
 
 function toEvent(row) {
+  const rsvps = row.rsvps || []
+  const waitlist = rsvps
+    .filter((r) => r.status === 'waitlist')
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
   return {
     id: row.id,
     hostId: row.host_id,
@@ -179,9 +256,19 @@ function toEvent(row) {
     startsAt: row.starts_at,
     durationMinutes: row.duration_minutes,
     maxCapacity: row.max_capacity,
-    attendeeIds: (row.rsvps || [])
-      .filter((r) => r.status === 'going')
-      .map((r) => r.user_id)
+    coverUrl: row.cover_url || null,
+    attendeeIds: rsvps.filter((r) => r.status === 'going').map((r) => r.user_id),
+    waitlistIds: waitlist.map((r) => r.user_id)
+  }
+}
+
+function toMessage(row) {
+  return {
+    id: row.id,
+    eventId: row.event_id,
+    userId: row.user_id,
+    text: row.body,
+    at: row.created_at
   }
 }
 
@@ -190,7 +277,17 @@ function friendly(error) {
   return new Error(error.message)
 }
 
-const EVENT_SELECT = '*, rsvps(user_id, status)'
+async function uploadCover(userId, coverDataUrl) {
+  const { dataUrlToBlob } = await import('@/utils/image')
+  const path = `${userId}/${crypto.randomUUID()}.jpg`
+  const { error } = await supabase.storage
+    .from('covers')
+    .upload(path, dataUrlToBlob(coverDataUrl), { contentType: 'image/jpeg' })
+  if (error) throw new Error(error.message)
+  return supabase.storage.from('covers').getPublicUrl(path).data.publicUrl
+}
+
+const EVENT_SELECT = '*, rsvps(user_id, status, created_at)'
 
 const live = {
   async listEvents() {
@@ -212,6 +309,7 @@ const live = {
   },
 
   async createEvent(data, host) {
+    const cover_url = data.coverDataUrl ? await uploadCover(host.id, data.coverDataUrl) : null
     const { data: row, error } = await supabase
       .from('events')
       .insert({
@@ -224,7 +322,8 @@ const live = {
         lng: data.lng,
         starts_at: data.startsAt,
         duration_minutes: data.durationMinutes,
-        max_capacity: data.maxCapacity
+        max_capacity: data.maxCapacity,
+        cover_url
       })
       .select(EVENT_SELECT)
       .single()
@@ -235,17 +334,26 @@ const live = {
   },
 
   async updateEvent(eventId, data) {
+    const patch = {
+      title: data.title.trim(),
+      description: data.description.trim(),
+      category: data.category,
+      location_name: data.locationName.trim(),
+      starts_at: data.startsAt,
+      duration_minutes: data.durationMinutes,
+      max_capacity: data.maxCapacity
+    }
+    if (data.coverDataUrl) {
+      const { data: current } = await supabase
+        .from('events')
+        .select('host_id')
+        .eq('id', eventId)
+        .single()
+      patch.cover_url = await uploadCover(current.host_id, data.coverDataUrl)
+    }
     const { data: row, error } = await supabase
       .from('events')
-      .update({
-        title: data.title.trim(),
-        description: data.description.trim(),
-        category: data.category,
-        location_name: data.locationName.trim(),
-        starts_at: data.startsAt,
-        duration_minutes: data.durationMinutes,
-        max_capacity: data.maxCapacity
-      })
+      .update(patch)
       .eq('id', eventId)
       .select(EVENT_SELECT)
       .single()
@@ -265,6 +373,14 @@ const live = {
     const { error } = await supabase
       .from('rsvps')
       .upsert({ event_id: eventId, user_id: userId, status: 'going' })
+    if (error) throw friendly(error)
+    return live.fetchEvent(eventId)
+  },
+
+  async joinWaitlist(eventId, userId) {
+    const { error } = await supabase
+      .from('rsvps')
+      .upsert({ event_id: eventId, user_id: userId, status: 'waitlist' })
     if (error) throw friendly(error)
     return live.fetchEvent(eventId)
   },
@@ -311,6 +427,40 @@ const live = {
       clearTimeout(timer)
       supabase.removeChannel(channel)
     }
+  },
+
+  /* chat ------------------------------------------------------------------ */
+
+  async listMessages(eventId) {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('event_id', eventId)
+      .order('created_at')
+    if (error) throw friendly(error)
+    return data.map(toMessage)
+  },
+
+  async sendMessage(eventId, user, text) {
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({ event_id: eventId, user_id: user.id, body: text.trim().slice(0, 500) })
+      .select()
+      .single()
+    if (error) throw friendly(error)
+    return toMessage(data)
+  },
+
+  subscribeToMessages(eventId, callback) {
+    const channel = supabase
+      .channel(`chat-${eventId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `event_id=eq.${eventId}` },
+        (payload) => callback(toMessage(payload.new))
+      )
+      .subscribe()
+    return () => supabase.removeChannel(channel)
   }
 }
 
@@ -324,5 +474,9 @@ export const createEvent = (...a) => backend.createEvent(...a)
 export const updateEvent = (...a) => backend.updateEvent(...a)
 export const cancelEvent = (...a) => backend.cancelEvent(...a)
 export const joinEvent = (...a) => backend.joinEvent(...a)
+export const joinWaitlist = (...a) => backend.joinWaitlist(...a)
 export const leaveEvent = (...a) => backend.leaveEvent(...a)
 export const subscribeToEvents = (...a) => backend.subscribeToEvents(...a)
+export const listMessages = (...a) => backend.listMessages(...a)
+export const sendMessage = (...a) => backend.sendMessage(...a)
+export const subscribeToMessages = (...a) => backend.subscribeToMessages(...a)

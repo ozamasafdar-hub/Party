@@ -123,7 +123,15 @@ function labelGroup(features, cls, { dedupe = true } = {}) {
 
 export function addVectorBasemap(map) {
   const renderer = L.canvas({ padding: 0.4 })
-  const opts = (style) => ({ style, renderer, interactive: false })
+  // Some gazetteer records carry Point geometry — skip them in polygon
+  // layers or Leaflet would render default (broken) marker icons
+  const opts = (style) => ({
+    style,
+    renderer,
+    interactive: false,
+    filter: (f) =>
+      f.geometry && f.geometry.type !== 'Point' && f.geometry.type !== 'MultiPoint'
+  })
 
   /* Always-on ground layers, bottom to top */
   const land = L.geoJSON(qatarCoastline, opts(LAND_STYLE)).addTo(map)

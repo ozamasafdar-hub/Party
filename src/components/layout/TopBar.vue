@@ -1,14 +1,30 @@
 <script setup>
+import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { CATEGORIES } from '@/config/categories'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useNotifStore } from '@/stores/notifStore'
+import { formatTime } from '@/utils/datetime'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
 
 const eventStore = useEventStore()
 const authStore = useAuthStore()
+const notifStore = useNotifStore()
 
 defineEmits(['signin'])
+
+const showNotifs = ref(false)
+
+function toggleNotifs() {
+  showNotifs.value = !showNotifs.value
+  if (showNotifs.value) notifStore.markAllRead()
+}
+
+function openNotif(notif) {
+  showNotifs.value = false
+  if (notif.eventId) eventStore.select(notif.eventId)
+}
 </script>
 
 <template>
@@ -33,6 +49,35 @@ defineEmits(['signin'])
         {{ cat.label }}
       </button>
     </nav>
+
+    <div v-if="authStore.currentUser" class="top-bar__bell-wrap">
+      <button
+        class="top-bar__bell glass-panel"
+        :title="`Notifications${notifStore.unreadCount ? ` (${notifStore.unreadCount} new)` : ''}`"
+        @click="toggleNotifs"
+      >
+        🔔
+        <span v-if="notifStore.unreadCount" class="top-bar__bell-badge">
+          {{ notifStore.unreadCount }}
+        </span>
+      </button>
+      <Transition name="fade">
+        <div v-if="showNotifs" class="top-bar__notifs glass-panel">
+          <p v-if="!notifStore.items.length" class="top-bar__notifs-empty">
+            Nothing yet — joins, updates, and reminders for your events show here.
+          </p>
+          <button
+            v-for="notif in notifStore.items"
+            :key="notif.id"
+            class="top-bar__notif"
+            @click="openNotif(notif)"
+          >
+            <span class="top-bar__notif-text">{{ notif.text }}</span>
+            <span class="top-bar__notif-time">{{ formatTime(notif.at) }}</span>
+          </button>
+        </div>
+      </Transition>
+    </div>
 
     <RouterLink
       v-if="authStore.currentUser"
@@ -137,6 +182,83 @@ defineEmits(['signin'])
 
 .top-bar__signin:hover {
   background: var(--bg-700);
+}
+
+.top-bar__bell-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.top-bar__bell {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.top-bar__bell-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent-bright);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--bg-900);
+}
+
+.top-bar__notifs {
+  position: absolute;
+  top: 56px;
+  right: 0;
+  width: min(320px, calc(100vw - 28px));
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 10px;
+  z-index: 60;
+}
+
+.top-bar__notifs-empty {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  padding: 8px 6px;
+}
+
+.top-bar__notif {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+}
+
+.top-bar__notif:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.top-bar__notif-text {
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
+.top-bar__notif-time {
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 @media (max-width: 720px) {

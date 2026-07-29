@@ -48,6 +48,17 @@ export function hasEnded(event, now = new Date()) {
   return now.getTime() > end
 }
 
+/** "Starts in 2h 15m" / "Started 20m ago" — shown when within 24h. */
+export function formatCountdown(iso, now = new Date()) {
+  const diff = new Date(iso).getTime() - now.getTime()
+  const abs = Math.abs(diff)
+  if (abs > 24 * 3600000) return ''
+  const h = Math.floor(abs / 3600000)
+  const m = Math.floor((abs % 3600000) / 60000)
+  const span = h ? `${h}h ${m}m` : `${Math.max(1, m)}m`
+  return diff > 0 ? `Starts in ${span}` : `Started ${span} ago`
+}
+
 /** Rounds "now" up to the next half hour — friendly default for new events. */
 export function nextHalfHourISO() {
   const d = new Date()

@@ -68,6 +68,7 @@ create table public.events (
   starts_at        timestamptz not null,
   duration_minutes integer not null check (duration_minutes between 15 and 1440),
   max_capacity     integer not null check (max_capacity between 2 and 500),
+  cover_url        text,
   is_cancelled     boolean not null default false,
   created_at       timestamptz not null default now()
 );
@@ -122,6 +123,53 @@ create trigger rsvps_capacity_check
   for each row execute function public.enforce_event_capacity();
 
 -- ----------------------------------------------------------------------------
+-- Waitlist promotion: when a "going" spot frees up, the longest-waiting
+-- member is promoted automatically.
+-- ----------------------------------------------------------------------------
+create or replace function public.promote_from_waitlist()
+returns trigger
+language plpgsql
+security definer
+as $$
+declare
+  cap integer;
+  cnt integer;
+  nxt uuid;
+begin
+  select max_capacity into cap from public.events where id = old.event_id;
+  select count(*) into cnt from public.rsvps
+   where event_id = old.event_id and status = 'going';
+  if cnt < cap then
+    select user_id into nxt from public.rsvps
+     where event_id = old.event_id and status = 'waitlist'
+     order by created_at limit 1;
+    if nxt is not null then
+      update public.rsvps set status = 'going'
+       where event_id = old.event_id and user_id = nxt;
+    end if;
+  end if;
+  return old;
+end;
+$$;
+
+create trigger rsvps_promote_waitlist
+  after delete on public.rsvps
+  for each row execute function public.promote_from_waitlist();
+
+-- ----------------------------------------------------------------------------
+-- MESSAGES — per-event chat
+-- ----------------------------------------------------------------------------
+create table public.messages (
+  id         uuid primary key default gen_random_uuid(),
+  event_id   uuid not null references public.events (id) on delete cascade,
+  user_id    uuid not null references public.profiles (id) on delete cascade,
+  body       text not null check (char_length(body) between 1 and 500),
+  created_at timestamptz not null default now()
+);
+
+create index messages_event_idx on public.messages (event_id, created_at);
+
+-- ----------------------------------------------------------------------------
 -- "Events near me" RPC — the map calls this with the visible bounds' center
 -- ----------------------------------------------------------------------------
 create or replace function public.events_within_radius(
@@ -151,6 +199,7 @@ $$;
 alter table public.profiles enable row level security;
 alter table public.events   enable row level security;
 alter table public.rsvps    enable row level security;
+alter table public.messages enable row level security;
 
 -- Only approved members can see anything
 create policy "approved members read profiles" on public.profiles
@@ -187,6 +236,23 @@ create policy "approved members read rsvps" on public.rsvps
 create policy "members manage own rsvps" on public.rsvps
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+create policy "approved members read messages" on public.messages
+  for select using (
+    exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_approved)
+  );
+
+-- Only people on the event (host, going, or waitlisted) can post
+create policy "attendees post messages" on public.messages
+  for insert with check (
+    user_id = auth.uid()
+    and (
+      exists (select 1 from public.rsvps r
+               where r.event_id = messages.event_id and r.user_id = auth.uid())
+      or exists (select 1 from public.events e
+                  where e.id = messages.event_id and e.host_id = auth.uid())
+    )
+  );
+
 -- ----------------------------------------------------------------------------
 -- Avatar storage — public bucket; members write only inside their own
 -- folder (avatars/<user-id>/...)
@@ -210,8 +276,23 @@ create policy "members update own avatar" on storage.objects
     and (storage.foldername(name))[1] = auth.uid()::text
   );
 
+-- Event cover photos — same pattern as avatars
+insert into storage.buckets (id, name, public)
+values ('covers', 'covers', true)
+on conflict (id) do nothing;
+
+create policy "anyone can view covers" on storage.objects
+  for select using (bucket_id = 'covers');
+
+create policy "members upload own covers" on storage.objects
+  for insert with check (
+    bucket_id = 'covers'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
 -- ----------------------------------------------------------------------------
 -- Realtime — stream INSERT/UPDATE/DELETE on events + rsvps to every client
 -- ----------------------------------------------------------------------------
 alter publication supabase_realtime add table public.events;
 alter publication supabase_realtime add table public.rsvps;
+alter publication supabase_realtime add table public.messages;

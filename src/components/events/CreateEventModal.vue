@@ -8,6 +8,7 @@
 import { computed, reactive, ref } from 'vue'
 import { CATEGORIES } from '@/config/categories'
 import { nextHalfHourISO, toLocalInputValue } from '@/utils/datetime'
+import { resizeCoverFile } from '@/utils/image'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -38,6 +39,23 @@ const form = reactive({
 
 const busy = ref(false)
 const error = ref('')
+const coverPreview = ref(props.event?.coverUrl ?? null)
+const newCover = ref(null)
+const coverInput = ref(null)
+
+async function onCoverChange(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+  error.value = ''
+  try {
+    const dataUrl = await resizeCoverFile(file)
+    newCover.value = dataUrl
+    coverPreview.value = dataUrl
+  } catch (e) {
+    error.value = e.message
+  }
+}
 
 const DURATIONS = [
   { label: '30 min', value: 30 },
@@ -64,7 +82,8 @@ async function submit() {
     lng: pin.value.lng,
     startsAt: startsAt.toISOString(),
     durationMinutes: Number(form.durationMinutes),
-    maxCapacity: Math.max(2, Number(form.maxCapacity))
+    maxCapacity: Math.max(2, Number(form.maxCapacity)),
+    coverDataUrl: newCover.value
   }
 
   busy.value = true
@@ -122,6 +141,21 @@ async function submit() {
         >
           {{ cat.label }}
         </button>
+      </div>
+
+      <label class="field-label">Cover photo <span class="create-modal__optional">(optional)</span></label>
+      <div class="create-modal__cover-row">
+        <img v-if="coverPreview" :src="coverPreview" class="create-modal__cover-preview" alt="" />
+        <button type="button" class="btn-ghost create-modal__cover-btn" @click="coverInput.click()">
+          📷 {{ coverPreview ? 'Change photo' : 'Add a photo' }}
+        </button>
+        <input
+          ref="coverInput"
+          class="create-modal__cover-file"
+          type="file"
+          accept="image/*"
+          @change="onCoverChange"
+        />
       </div>
 
       <label class="field-label" for="ev-place">Place name</label>
@@ -222,6 +256,36 @@ async function submit() {
 
 .create-modal__cat--active {
   color: #0b0f19;
+}
+
+.create-modal__optional {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  color: rgba(154, 165, 184, 0.7);
+}
+
+.create-modal__cover-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.create-modal__cover-preview {
+  width: 120px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.create-modal__cover-btn {
+  padding: 9px 16px;
+  font-size: 13px;
+}
+
+.create-modal__cover-file {
+  display: none;
 }
 
 .create-modal__row {

@@ -6,10 +6,13 @@ import {
   updateEvent,
   cancelEvent,
   joinEvent,
+  joinWaitlist,
   leaveEvent,
   subscribeToEvents
 } from '@/services/eventService'
-import { hasEnded } from '@/utils/datetime'
+import { hasEnded, isLive } from '@/utils/datetime'
+import { useNotifStore } from './notifStore'
+import { useAuthStore } from './authStore'
 
 export const useEventStore = defineStore('events', {
   state: () => ({
@@ -17,6 +20,7 @@ export const useEventStore = defineStore('events', {
     members: [],
     selectedEventId: null,
     activeCategory: null, // null = show every category
+    timeWindow: 'all', // 'all' | 'now' | 'today' | 'week'
     loading: false,
     unsubscribe: null
   }),
@@ -25,9 +29,15 @@ export const useEventStore = defineStore('events', {
     /** Events still worth showing on the map (not finished yet). */
     visibleEvents(state) {
       const now = new Date()
+      const endOfToday = new Date(now)
+      endOfToday.setHours(23, 59, 59, 999)
+      const weekAhead = new Date(now.getTime() + 7 * 86400000)
       return state.events.filter((e) => {
         if (hasEnded(e, now)) return false
         if (state.activeCategory && e.category !== state.activeCategory) return false
+        if (state.timeWindow === 'now' && !isLive(e, now)) return false
+        if (state.timeWindow === 'today' && new Date(e.startsAt) > endOfToday) return false
+        if (state.timeWindow === 'week' && new Date(e.startsAt) > weekAhead) return false
         return true
       })
     },
@@ -47,6 +57,14 @@ export const useEventStore = defineStore('events', {
 
     isFull() {
       return (event) => event.attendeeIds.length >= event.maxCapacity
+    },
+
+    isWaitlisted() {
+      return (event, userId) => (event.waitlistIds || []).includes(userId)
+    },
+
+    waitlistPosition() {
+      return (event, userId) => (event.waitlistIds || []).indexOf(userId) + 1
     },
 
     hostedBy(state) {
@@ -77,6 +95,11 @@ export const useEventStore = defineStore('events', {
     /** Live sync: changes stream in and patch (or replace) local state. */
     startRealtime() {
       if (this.unsubscribe) return
+      const notifStore = useNotifStore()
+      const authStore = useAuthStore()
+      const meId = () => authStore.currentUser?.id
+      const nameOf = (id) => this.memberById(id)?.name || 'Someone'
+
       this.unsubscribe = subscribeToEvents((change) => {
         if (change.type === 'INSERT') {
           if (!this.events.some((e) => e.id === change.event.id)) {
@@ -84,8 +107,12 @@ export const useEventStore = defineStore('events', {
           }
         } else if (change.type === 'UPDATE') {
           const i = this.events.findIndex((e) => e.id === change.event.id)
-          if (i !== -1) this.events.splice(i, 1, change.event)
+          if (i !== -1) {
+            notifStore.diffEvent(this.events[i], change.event, meId(), nameOf)
+            this.events.splice(i, 1, change.event)
+          }
         } else if (change.type === 'SYNC') {
+          notifStore.diffSnapshot(this.events, change.events, meId(), nameOf)
           this.events = change.events
         }
       })
@@ -108,6 +135,10 @@ export const useEventStore = defineStore('events', {
 
     setCategory(category) {
       this.activeCategory = this.activeCategory === category ? null : category
+    },
+
+    setTimeWindow(window) {
+      this.timeWindow = window
     },
 
     async create(data, host) {
@@ -139,6 +170,22 @@ export const useEventStore = defineStore('events', {
       const i = this.events.findIndex((e) => e.id === event.id)
       if (i !== -1) this.events.splice(i, 1, event)
       return event
+    },
+
+    async joinWaitlist(eventId, userId) {
+      const event = await joinWaitlist(eventId, userId)
+      const i = this.events.findIndex((e) => e.id === event.id)
+      if (i !== -1) this.events.splice(i, 1, event)
+      return event
+    },
+
+    /** Join if there's room, otherwise queue on the waitlist. */
+    async smartJoin(eventId, userId) {
+      const event = this.events.find((e) => e.id === eventId)
+      if (event && event.attendeeIds.length >= event.maxCapacity) {
+        return this.joinWaitlist(eventId, userId)
+      }
+      return this.rsvp(eventId, userId)
     },
 
     async cancelRsvp(eventId, userId) {

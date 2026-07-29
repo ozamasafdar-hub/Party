@@ -21,6 +21,30 @@ function at(hoursFromNow, minutes = 0) {
   return d.toISOString()
 }
 
+export const SEED_MESSAGES = [
+  {
+    id: 'm-1',
+    eventId: 'e-bowling',
+    userId: 'u-mariam',
+    text: 'Anyone carpooling from West Bay?',
+    at: new Date(Date.now() - 2 * 3600000).toISOString()
+  },
+  {
+    id: 'm-2',
+    eventId: 'e-bowling',
+    userId: 'u-hassan',
+    text: 'I can take 3 people — leaving 7:30 from the Corniche.',
+    at: new Date(Date.now() - 90 * 60000).toISOString()
+  },
+  {
+    id: 'm-3',
+    eventId: 'e-yacht',
+    userId: 'u-noora',
+    text: 'Berth 12 at Porto Arabia — look for the blue hull ⚓',
+    at: new Date(Date.now() - 40 * 60000).toISOString()
+  }
+]
+
 export const SEED_EVENTS = [
   {
     id: 'e-bowling',

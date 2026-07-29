@@ -14,6 +14,12 @@ const router = createRouter({
       component: () => import('@/views/MapView.vue')
     },
     {
+      // Shared event links: /e/<id> opens the map with that event's card
+      path: '/e/:id',
+      name: 'event-link',
+      component: () => import('@/views/MapView.vue')
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/views/LoginView.vue')

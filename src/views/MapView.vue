@@ -8,6 +8,7 @@
  *   - Edit mode reusing the same modal for hosts
  */
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import LiveMap from '@/components/map/LiveMap.vue'
 import TopBar from '@/components/layout/TopBar.vue'
 import EventCard from '@/components/events/EventCard.vue'
@@ -17,10 +18,13 @@ import LoginPanel from '@/components/auth/LoginPanel.vue'
 import MapStyleControl from '@/components/map/MapStyleControl.vue'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useNotifStore } from '@/stores/notifStore'
 import { BASEMAPS, DEFAULT_BASEMAP } from '@/config/map'
 
+const route = useRoute()
 const eventStore = useEventStore()
 const authStore = useAuthStore()
+const notifStore = useNotifStore()
 
 const STYLE_KEY = 'wyn:map-style'
 const HEAT_KEY = 'wyn:map-heat'
@@ -95,11 +99,24 @@ const pendingCreate = ref(false)
 
 const selectedEvent = computed(() => eventStore.selectedEvent)
 
-onMounted(() => {
-  eventStore.load()
+let soonTimer = null
+
+onMounted(async () => {
+  await eventStore.load()
+  // Shared link: /e/<id> lands with that event's card open
+  if (route.name === 'event-link' && route.params.id) {
+    const exists = eventStore.events.some((e) => e.id === route.params.id)
+    if (exists) eventStore.select(route.params.id)
+  }
+  // Starting-soon reminders for events I've joined
+  soonTimer = setInterval(() => {
+    notifStore.checkStartingSoon(eventStore.events, authStore.currentUser?.id)
+  }, 60000)
+  notifStore.checkStartingSoon(eventStore.events, authStore.currentUser?.id)
 })
 
 onBeforeUnmount(() => {
+  clearInterval(soonTimer)
   eventStore.stopRealtime()
 })
 
@@ -139,7 +156,7 @@ async function onLoginSuccess() {
   closeLogin()
   if (joinId) {
     try {
-      await eventStore.rsvp(joinId, authStore.currentUser.id)
+      await eventStore.smartJoin(joinId, authStore.currentUser.id)
     } catch {
       /* event filled up meanwhile — the open card shows the live state */
     }

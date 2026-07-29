@@ -26,6 +26,23 @@ const upcoming = computed(() =>
       <button class="event-list__close" aria-label="Close" @click="emit('close')">✕</button>
     </header>
 
+    <div class="event-list__windows">
+      <button
+        v-for="win in [
+          { key: 'all', label: 'All' },
+          { key: 'now', label: 'Now' },
+          { key: 'today', label: 'Today' },
+          { key: 'week', label: 'Week' }
+        ]"
+        :key="win.key"
+        class="event-list__window"
+        :class="{ 'event-list__window--active': eventStore.timeWindow === win.key }"
+        @click="eventStore.setTimeWindow(win.key)"
+      >
+        {{ win.label }}
+      </button>
+    </div>
+
     <p v-if="!upcoming.length" class="event-list__empty">
       Nothing on the map right now — be the first to drop an event!
     </p>
@@ -80,6 +97,30 @@ const upcoming = computed(() =>
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+.event-list__windows {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.event-list__window {
+  flex: 1;
+  padding: 7px 0;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  transition: all 0.15s ease;
+}
+
+.event-list__window--active {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);
+  color: #fff;
+  border-color: transparent;
 }
 
 .event-list__empty {
