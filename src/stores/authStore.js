@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { supabase, isLive } from '@/services/supabaseClient'
 import { toMember } from '@/services/eventService'
 
-const SESSION_KEY = 'majlis-map:session'
+const SESSION_KEY = 'wyn:session'
 
 /**
  * Members-only access, two modes:
@@ -13,7 +13,7 @@ const SESSION_KEY = 'majlis-map:session'
  *    sign-in only needs the email code.
  *  - DEMO: name + invite code, session in localStorage.
  */
-const DEMO_INVITE_CODES = ['PEARL2026', 'MAJLIS-VIP', 'DOHA-CREW']
+const DEMO_INVITE_CODES = ['PEARL2026', 'WYN-VIP', 'DOHA-CREW']
 
 const AVATAR_COLORS = ['#c62d55', '#38bdf8', '#2dd4a0', '#a78bfa', '#fbbf6e', '#fb7185']
 

@@ -70,7 +70,7 @@ async function submitCode() {
     <div class="login__backdrop" aria-hidden="true" />
     <div class="login__card glass-panel">
       <div class="login__logo">🗺️</div>
-      <h1 class="login__title">Majlis Map</h1>
+      <h1 class="login__title">WYN</h1>
       <p class="login__subtitle">
         Qatar's members-only social map.<br />
         See what's happening. Join in. Host your own.

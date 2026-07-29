@@ -1,4 +1,4 @@
-# 🗺️ Majlis Map — Qatar's Members-Only Social Events Map
+# 🗺️ WYN — Qatar's Members-Only Social Events Map
 
 A members-only web app that connects people in Qatar through member-hosted
 social events. The home screen is a fullscreen, Snap-Map-style **live map**:

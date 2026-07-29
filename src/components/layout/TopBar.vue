@@ -14,7 +14,7 @@ const authStore = useAuthStore()
     <div class="top-bar__brand glass-panel">
       <span class="top-bar__logo">🗺️</span>
       <div>
-        <div class="top-bar__name">Majlis Map</div>
+        <div class="top-bar__name">WYN</div>
         <div class="top-bar__tagline">{{ eventStore.visibleEvents.length }} events live in Qatar</div>
       </div>
     </div>

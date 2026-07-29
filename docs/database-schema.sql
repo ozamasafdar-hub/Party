@@ -1,5 +1,5 @@
 -- ============================================================================
--- Majlis Map — production database schema (Supabase / PostgreSQL + PostGIS)
+-- WYN — production database schema (Supabase / PostgreSQL + PostGIS)
 --
 -- Three core tables: profiles (Users), events (with geospatial coordinates),
 -- rsvps. Plus invites for the members-only gate.
@@ -220,7 +220,7 @@ $$;
 -- Seed invite codes (add more any time; each code admits one member)
 -- ----------------------------------------------------------------------------
 insert into public.invites (code) values
-  ('PEARL2026'), ('MAJLIS-VIP'), ('DOHA-CREW')
+  ('PEARL2026'), ('WYN-VIP'), ('DOHA-CREW')
 on conflict (code) do nothing;
 
 -- ----------------------------------------------------------------------------
