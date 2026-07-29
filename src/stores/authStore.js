@@ -115,7 +115,7 @@ export const useAuthStore = defineStore('auth', {
     async _loadProfile(userId) {
       const { data } = await supabase
         .from('profiles')
-        .select('id, full_name, is_approved')
+        .select('id, full_name, avatar_url, bio, is_approved')
         .eq('id', userId)
         .maybeSingle()
       if (data?.is_approved) this.currentUser = toMember(data)
@@ -190,6 +190,66 @@ export const useAuthStore = defineStore('auth', {
       this.currentUser = user
       storage.set(SESSION_KEY, JSON.stringify(user))
       return this.currentUser
+    },
+
+    /**
+     * Update name, bio and/or profile photo. `avatarDataUrl` is a resized
+     * JPEG data URL from the edit form. Live mode uploads it to Supabase
+     * Storage; demo mode keeps everything in this browser.
+     */
+    async updateProfile({ name, bio, avatarDataUrl }) {
+      const trimmed = (name || '').trim()
+      if (trimmed.length < 2) throw new Error('Please enter your name.')
+      const cleanBio = (bio || '').trim().slice(0, 160)
+
+      if (isLive) {
+        let avatar_url
+        if (avatarDataUrl) {
+          const { dataUrlToBlob } = await import('@/utils/image')
+          const path = `${this.currentUser.id}/avatar.jpg`
+          const { error: uploadError } = await supabase.storage
+            .from('avatars')
+            .upload(path, dataUrlToBlob(avatarDataUrl), {
+              upsert: true,
+              contentType: 'image/jpeg'
+            })
+          if (uploadError) throw new Error(uploadError.message)
+          const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+          avatar_url = `${data.publicUrl}?v=${Date.now()}` // bust stale caches
+        }
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            full_name: trimmed,
+            bio: cleanBio || null,
+            ...(avatar_url ? { avatar_url } : {})
+          })
+          .eq('id', this.currentUser.id)
+        if (error) throw new Error(error.message)
+        await this._loadProfile(this.currentUser.id)
+        return this.currentUser
+      }
+
+      const initials = trimmed
+        .split(/\s+/)
+        .map((part) => part[0].toUpperCase())
+        .slice(0, 2)
+        .join('')
+      const user = {
+        ...this.currentUser,
+        name: trimmed,
+        initials,
+        bio: cleanBio,
+        avatarUrl: avatarDataUrl ?? this.currentUser.avatarUrl ?? null
+      }
+      this.currentUser = user
+      storage.set(SESSION_KEY, JSON.stringify(user))
+      const accounts = readAccounts()
+      for (const email of Object.keys(accounts)) {
+        if (accounts[email].user?.id === user.id) accounts[email].user = user
+      }
+      storage.set(ACCOUNTS_KEY, JSON.stringify(accounts))
+      return user
     },
 
     async logout() {

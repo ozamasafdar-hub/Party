@@ -188,6 +188,29 @@ create policy "members manage own rsvps" on public.rsvps
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- ----------------------------------------------------------------------------
+-- Avatar storage — public bucket; members write only inside their own
+-- folder (avatars/<user-id>/...)
+-- ----------------------------------------------------------------------------
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', true)
+on conflict (id) do nothing;
+
+create policy "anyone can view avatars" on storage.objects
+  for select using (bucket_id = 'avatars');
+
+create policy "members upload own avatar" on storage.objects
+  for insert with check (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "members update own avatar" on storage.objects
+  for update using (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- ----------------------------------------------------------------------------
 -- Realtime — stream INSERT/UPDATE/DELETE on events + rsvps to every client
 -- ----------------------------------------------------------------------------
 alter publication supabase_realtime add table public.events;

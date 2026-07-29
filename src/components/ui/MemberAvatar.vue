@@ -15,7 +15,13 @@ defineProps({
       background: member.avatarColor || '#94a3b8'
     }"
   >
-    {{ member.initials }}
+    <img
+      v-if="member.avatarUrl"
+      :src="member.avatarUrl"
+      class="member-avatar__img"
+      alt=""
+    />
+    <template v-else>{{ member.initials }}</template>
   </span>
 </template>
 
@@ -30,5 +36,13 @@ defineProps({
   border: 2px solid rgba(255, 255, 255, 0.25);
   flex-shrink: 0;
   user-select: none;
+  overflow: hidden;
+}
+
+.member-avatar__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
 }
 </style>

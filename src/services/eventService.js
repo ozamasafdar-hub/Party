@@ -160,7 +160,9 @@ export function toMember(profile) {
     id: profile.id,
     name: profile.full_name,
     initials: initialsOf(profile.full_name || ''),
-    avatarColor: colorFor(profile.id)
+    avatarColor: colorFor(profile.id),
+    avatarUrl: profile.avatar_url || null,
+    bio: profile.bio || ''
   }
 }
 
@@ -202,7 +204,9 @@ const live = {
   },
 
   async listMembers() {
-    const { data, error } = await supabase.from('profiles').select('id, full_name')
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, avatar_url')
     if (error) throw friendly(error)
     return data.map(toMember)
   },

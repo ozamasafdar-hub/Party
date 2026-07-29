@@ -3,13 +3,14 @@
  * ProfileView — member profile: avatar, name, and history of
  * hosted / attended events.
  */
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useEventStore } from '@/stores/eventStore'
 import { categoryOf } from '@/config/categories'
 import { formatWhen } from '@/utils/datetime'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
+import EditProfileModal from '@/components/profile/EditProfileModal.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -18,6 +19,7 @@ const eventStore = useEventStore()
 const user = computed(() => authStore.currentUser)
 const hosted = computed(() => eventStore.hostedBy(user.value.id))
 const attended = computed(() => eventStore.attendedBy(user.value.id))
+const showEdit = ref(false)
 
 onMounted(() => {
   if (!eventStore.events.length) eventStore.load()
@@ -45,12 +47,16 @@ function logout() {
         <MemberAvatar :member="user" :size="72" />
         <div class="profile__identity">
           <h1 class="profile__name">{{ user.name }}</h1>
+          <p v-if="user.bio" class="profile__bio">{{ user.bio }}</p>
           <p class="profile__stats">
             <span><strong>{{ hosted.length }}</strong> hosted</span>
             <span><strong>{{ attended.length }}</strong> attended</span>
           </p>
         </div>
-        <button class="btn-ghost profile__logout" @click="logout">Sign out</button>
+        <div class="profile__actions">
+          <button class="btn-ghost profile__edit" @click="showEdit = true">✏️ Edit profile</button>
+          <button class="btn-ghost profile__logout" @click="logout">Sign out</button>
+        </div>
       </header>
 
       <section v-for="group in [
@@ -80,6 +86,14 @@ function logout() {
         </button>
       </section>
     </div>
+
+    <Transition name="fade">
+      <EditProfileModal
+        v-if="showEdit"
+        @close="showEdit = false"
+        @saved="showEdit = false"
+      />
+    </Transition>
   </div>
 </template>
 
@@ -119,6 +133,13 @@ function logout() {
   font-weight: 800;
 }
 
+.profile__bio {
+  margin-top: 4px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
 .profile__stats {
   display: flex;
   gap: 16px;
@@ -131,8 +152,26 @@ function logout() {
   color: var(--text-primary);
 }
 
-.profile__logout {
+.profile__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   flex-shrink: 0;
+}
+
+@media (max-width: 520px) {
+  .profile__header {
+    flex-wrap: wrap;
+  }
+
+  .profile__actions {
+    flex-direction: row;
+    flex-basis: 100%;
+  }
+
+  .profile__actions > * {
+    flex: 1;
+  }
 }
 
 .profile__section {
