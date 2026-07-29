@@ -2,6 +2,32 @@ import { defineStore } from 'pinia'
 
 const SESSION_KEY = 'majlis-map:session'
 
+// localStorage throws in some sandboxed iframes (e.g. hosted previews);
+// fall back to in-memory so login still works, just without persistence.
+const storage = {
+  get(key) {
+    try {
+      return localStorage.getItem(key)
+    } catch {
+      return storage._mem?.[key] ?? null
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem(key, value)
+    } catch {
+      ;(storage._mem ??= {})[key] = value
+    }
+  },
+  remove(key) {
+    try {
+      localStorage.removeItem(key)
+    } catch {
+      if (storage._mem) delete storage._mem[key]
+    }
+  }
+}
+
 /**
  * Members-only access. Demo mode gates entry behind an invite code and
  * stores the session locally; in production this becomes Supabase Auth
@@ -26,10 +52,10 @@ export const useAuthStore = defineStore('auth', {
       if (this.restored) return
       this.restored = true
       try {
-        const raw = localStorage.getItem(SESSION_KEY)
+        const raw = storage.get(SESSION_KEY)
         if (raw) this.currentUser = JSON.parse(raw)
       } catch {
-        localStorage.removeItem(SESSION_KEY)
+        storage.remove(SESSION_KEY)
       }
     },
 
@@ -54,13 +80,13 @@ export const useAuthStore = defineStore('auth', {
         initials,
         avatarColor: AVATAR_COLORS[trimmed.length % AVATAR_COLORS.length]
       }
-      localStorage.setItem(SESSION_KEY, JSON.stringify(this.currentUser))
+      storage.set(SESSION_KEY, JSON.stringify(this.currentUser))
       return this.currentUser
     },
 
     logout() {
       this.currentUser = null
-      localStorage.removeItem(SESSION_KEY)
+      storage.remove(SESSION_KEY)
     }
   }
 })

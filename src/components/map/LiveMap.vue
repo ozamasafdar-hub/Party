@@ -15,6 +15,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { MAP_OPTIONS, TILE_URL, TILE_OPTIONS, QATAR_CENTER } from '@/config/map'
 import { buildEventIcon, buildDraftIcon } from './eventMarker'
+import { addVectorBasemap } from './vectorBasemap'
 import { isLive, formatWhen } from '@/utils/datetime'
 
 const props = defineProps({
@@ -34,7 +35,18 @@ let refreshTimer = null
 
 onMounted(() => {
   map = L.map(mapEl.value, MAP_OPTIONS)
-  L.tileLayer(TILE_URL, TILE_OPTIONS).addTo(map)
+
+  // If the tile CDN is unreachable (offline demo, sandboxed hosting),
+  // swap the raster layer for the bundled vector chart of Qatar.
+  const tiles = L.tileLayer(TILE_URL, TILE_OPTIONS).addTo(map)
+  let fellBack = false
+  tiles.on('tileerror', () => {
+    if (fellBack) return
+    fellBack = true
+    tiles.remove()
+    addVectorBasemap(map)
+  })
+
   L.control.zoom({ position: 'bottomright' }).addTo(map)
 
   map.on('click', onMapClick)
@@ -200,5 +212,27 @@ defineExpose({ locateMe, resetView, clearDraftPin })
 
 .live-map :deep(.event-tooltip::before) {
   display: none;
+}
+
+.live-map :deep(.place-label) {
+  pointer-events: none;
+}
+
+.live-map :deep(.place-label__text) {
+  display: inline-block;
+  transform: translate(-50%, -50%);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(154, 165, 184, 0.75);
+  text-shadow: 0 1px 6px rgba(10, 14, 23, 0.9);
+  white-space: nowrap;
+}
+
+.live-map :deep(.place-label__text--major) {
+  font-size: 13px;
+  color: rgba(244, 246, 251, 0.85);
+  letter-spacing: 0.18em;
 }
 </style>
