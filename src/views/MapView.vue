@@ -241,6 +241,13 @@ function toggleList() {
       </button>
     </div>
 
+    <!-- Action confirmations (joined, waitlisted, left) -->
+    <Transition name="fade">
+      <div v-if="notifStore.toast" class="map-view__notice map-view__notice--toast glass-panel">
+        {{ notifStore.toast }}
+      </div>
+    </Transition>
+
     <!-- Tile-fallback notice -->
     <Transition name="fade">
       <div v-if="fallbackNotice" class="map-view__notice glass-panel">
@@ -423,6 +430,14 @@ function toggleList() {
   color: var(--gold);
   font-weight: 700;
   text-decoration: underline;
+}
+
+.map-view__notice--toast {
+  z-index: 47;
+  color: var(--text-primary);
+  font-weight: 600;
+  border-color: rgba(45, 212, 160, 0.4);
+  box-shadow: 0 12px 36px rgba(45, 212, 160, 0.15), var(--shadow-card);
 }
 
 @media (max-width: 520px) {

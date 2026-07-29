@@ -12,7 +12,9 @@ import { formatCountdown } from '@/utils/datetime'
 export const useNotifStore = defineStore('notifications', {
   state: () => ({
     items: [], // { id, text, eventId, at, read }
-    soonNotified: new Set()
+    soonNotified: new Set(),
+    toast: '',
+    toastTimer: null
   }),
 
   getters: {
@@ -35,6 +37,15 @@ export const useNotifStore = defineStore('notifications', {
       this.items.forEach((n) => {
         n.read = true
       })
+    },
+
+    /** Transient on-map confirmation banner ("You're in — see you there!"). */
+    flash(text) {
+      this.toast = text
+      clearTimeout(this.toastTimer)
+      this.toastTimer = setTimeout(() => {
+        this.toast = ''
+      }, 4000)
     },
 
     /** Diff one event's previous vs next state for things worth telling me. */

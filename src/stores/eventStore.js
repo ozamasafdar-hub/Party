@@ -169,6 +169,9 @@ export const useEventStore = defineStore('events', {
       const event = await joinEvent(eventId, userId)
       const i = this.events.findIndex((e) => e.id === event.id)
       if (i !== -1) this.events.splice(i, 1, event)
+      const notifStore = useNotifStore()
+      notifStore.flash(`🎉 You're in — see you at "${event.title}"!`)
+      notifStore.push(`You joined "${event.title}"`, event.id)
       return event
     },
 
@@ -176,6 +179,10 @@ export const useEventStore = defineStore('events', {
       const event = await joinWaitlist(eventId, userId)
       const i = this.events.findIndex((e) => e.id === event.id)
       if (i !== -1) this.events.splice(i, 1, event)
+      const pos = (event.waitlistIds || []).indexOf(userId) + 1
+      const notifStore = useNotifStore()
+      notifStore.flash(`⏳ You're #${pos} on the waitlist for "${event.title}"`)
+      notifStore.push(`You joined the waitlist for "${event.title}" (#${pos})`, event.id)
       return event
     },
 
@@ -192,6 +199,7 @@ export const useEventStore = defineStore('events', {
       const event = await leaveEvent(eventId, userId)
       const i = this.events.findIndex((e) => e.id === event.id)
       if (i !== -1) this.events.splice(i, 1, event)
+      useNotifStore().flash(`You've left "${event.title}"`)
       return event
     }
   }
