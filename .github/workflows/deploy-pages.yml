@@ -26,10 +26,12 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
-          # Set these two repository secrets to switch the live site from
-          # demo mode to the real Supabase backend
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # Supabase project URL + anon key. These are public by design —
+          # they ship to every visitor's browser and data is protected by
+          # Row Level Security — so they're pinned here to keep deploys
+          # deterministic instead of relying on hand-pasted secrets.
+          VITE_SUPABASE_URL: https://zfulodaqnnozyucgpxtw.supabase.co
+          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmdWxvZGFxbm5venl1Y2dweHR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNDk3MjcsImV4cCI6MjEwMDkyNTcyN30.pVDXxoCw8ZhsgY_OeWfKf8XoY7xhaszBHyeQSrfDm7g
       - uses: actions/configure-pages@v5
         with:
           enablement: true

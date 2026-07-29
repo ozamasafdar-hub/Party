@@ -187,10 +187,9 @@ RSVP sync.
    provider is enabled (it is by default).
 4. Grab **Settings → API → Project URL** and the **anon public** key, then:
    - **Local dev:** copy `.env.example` to `.env` and fill both values.
-   - **Deployed site:** in the GitHub repo, add them as
-     **Settings → Secrets and variables → Actions → New repository secret**,
-     named `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, then re-run the
-     "Deploy to GitHub Pages" workflow.
+   - **Deployed site:** both values are pinned in
+     `.github/workflows/deploy-pages.yml` (they're public by design —
+     protected by Row Level Security) — update them there and push.
 5. Optional: in **Authentication → Sign In / Up**, turn off **Confirm
    email** for instant sign-up (otherwise new members click a
    confirmation link first). To hand-approve members later, set the
