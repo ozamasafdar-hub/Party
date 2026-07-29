@@ -63,9 +63,15 @@ function setHeat(on) {
   writePref(HEAT_KEY, on ? '1' : '0')
 }
 
+const fallbackNotice = ref(false)
+let noticeTimer = null
+
 function onTileFallback() {
   // Raster tiles unreachable — the map switched itself to the chart
   mapStyle.value = 'chart'
+  fallbackNotice.value = true
+  clearTimeout(noticeTimer)
+  noticeTimer = setTimeout(() => (fallbackNotice.value = false), 5000)
 }
 
 // Sign-in modal — opened at the moment a visitor tries a members-only
@@ -205,6 +211,13 @@ function toggleList() {
         🌍
       </button>
     </div>
+
+    <!-- Tile-fallback notice -->
+    <Transition name="fade">
+      <div v-if="fallbackNotice" class="map-view__notice glass-panel">
+        Couldn't reach the map tile server — showing the offline chart instead.
+      </div>
+    </Transition>
 
     <!-- Map style picker -->
     <Transition name="fade">
@@ -353,6 +366,21 @@ function toggleList() {
   z-index: 45;
   right: 72px;
   bottom: 190px;
+}
+
+.map-view__notice {
+  position: absolute;
+  z-index: 46;
+  top: max(84px, calc(env(safe-area-inset-top) + 70px));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 11px 18px;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  max-width: calc(100vw - 24px);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @media (max-width: 520px) {

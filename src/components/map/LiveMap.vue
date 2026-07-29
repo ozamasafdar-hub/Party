@@ -95,13 +95,21 @@ function applyBasemap(key) {
   }
 
   // If the tile CDN is unreachable (offline, sandboxed hosting), swap to
-  // the bundled vector chart and tell the parent so the picker updates
+  // the bundled vector chart and tell the parent so the picker updates.
+  // Only fall back when NOTHING loads: a single dropped tile on a flaky
+  // connection must not permanently downgrade the chosen style.
+  let loaded = 0
+  let errored = 0
   let fellBack = false
   style.tiles.forEach(({ url, options }, i) => {
     const layer = L.tileLayer(url, options).addTo(map)
     if (i === 0) {
+      layer.on('tileload', () => {
+        loaded += 1
+      })
       layer.on('tileerror', () => {
-        if (fellBack) return
+        errored += 1
+        if (fellBack || loaded > 0 || errored < 3) return
         fellBack = true
         applyBasemap('chart')
         emit('fallback', key)
