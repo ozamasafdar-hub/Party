@@ -9,13 +9,15 @@
  * Emits:
  *   select(eventId)      — a pin was tapped
  *   pick({ lat, lng })   — the map was tapped while in pick mode
+ *   fallback(styleKey)   — raster tiles unreachable; switched to the chart
  */
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
-import { MAP_OPTIONS, TILE_URL, TILE_OPTIONS, QATAR_CENTER } from '@/config/map'
+import 'leaflet.heat'
+import { MAP_OPTIONS, BASEMAPS, DEFAULT_BASEMAP, QATAR_CENTER } from '@/config/map'
 import { buildEventIcon, buildDraftIcon } from './eventMarker'
 import { addVectorBasemap } from './vectorBasemap'
 import { isLive, formatWhen } from '@/utils/datetime'
@@ -23,10 +25,12 @@ import { isLive, formatWhen } from '@/utils/datetime'
 const props = defineProps({
   events: { type: Array, required: true },
   selectedId: { type: String, default: null },
-  pickMode: { type: Boolean, default: false }
+  pickMode: { type: Boolean, default: false },
+  styleKey: { type: String, default: DEFAULT_BASEMAP },
+  showHeat: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['select', 'pick'])
+const emit = defineEmits(['select', 'pick', 'fallback'])
 
 const mapEl = ref(null)
 
@@ -36,20 +40,14 @@ let markersById = new Map()
 let draftMarker = null
 let locationMarker = null
 let refreshTimer = null
+let baseLayers = []
+let vectorCleanup = null
+let heatLayer = null
 
 onMounted(() => {
   map = L.map(mapEl.value, MAP_OPTIONS)
 
-  // If the tile CDN is unreachable (offline demo, sandboxed hosting),
-  // swap the raster layer for the bundled vector chart of Qatar.
-  const tiles = L.tileLayer(TILE_URL, TILE_OPTIONS).addTo(map)
-  let fellBack = false
-  tiles.on('tileerror', () => {
-    if (fellBack) return
-    fellBack = true
-    tiles.remove()
-    addVectorBasemap(map)
-  })
+  applyBasemap(props.styleKey)
 
   L.control.zoom({ position: 'bottomright' }).addTo(map)
 
@@ -73,10 +71,68 @@ onMounted(() => {
   map.on('locationfound', onLocationFound)
 
   renderMarkers(props.events)
+  applyHeat()
 
   // Re-style pins once a minute so "live" pulses appear exactly on time
   refreshTimer = setInterval(() => renderMarkers(props.events), 60000)
 })
+
+/* --- basemap styles ------------------------------------------------------ */
+
+function applyBasemap(key) {
+  if (!map) return
+  baseLayers.forEach((layer) => layer.remove())
+  baseLayers = []
+  if (vectorCleanup) {
+    vectorCleanup()
+    vectorCleanup = null
+  }
+
+  const style = BASEMAPS[key] || BASEMAPS[DEFAULT_BASEMAP]
+  if (style.vector) {
+    vectorCleanup = addVectorBasemap(map)
+    return
+  }
+
+  // If the tile CDN is unreachable (offline, sandboxed hosting), swap to
+  // the bundled vector chart and tell the parent so the picker updates
+  let fellBack = false
+  style.tiles.forEach(({ url, options }, i) => {
+    const layer = L.tileLayer(url, options).addTo(map)
+    if (i === 0) {
+      layer.on('tileerror', () => {
+        if (fellBack) return
+        fellBack = true
+        applyBasemap('chart')
+        emit('fallback', key)
+      })
+    }
+    baseLayers.push(layer)
+  })
+}
+
+/* --- activity heatmap ---------------------------------------------------- */
+
+function applyHeat() {
+  if (!map) return
+  if (heatLayer) {
+    heatLayer.remove()
+    heatLayer = null
+  }
+  if (!props.showHeat || !props.events.length) return
+  const points = props.events.map((e) => [
+    e.lat,
+    e.lng,
+    Math.max(0.4, e.attendeeIds.length / e.maxCapacity)
+  ])
+  heatLayer = L.heatLayer(points, {
+    radius: 38,
+    blur: 28,
+    maxZoom: 15,
+    minOpacity: 0.35,
+    gradient: { 0.2: '#8b1538', 0.5: '#c62d55', 0.8: '#d4af6a', 1: '#f4e9c9' }
+  }).addTo(map)
+}
 
 onBeforeUnmount(() => {
   clearInterval(refreshTimer)
@@ -86,6 +142,9 @@ onBeforeUnmount(() => {
   }
   clusterGroup = null
   locationMarker = null
+  heatLayer = null
+  vectorCleanup = null
+  baseLayers = []
   markersById = new Map()
 })
 
@@ -206,7 +265,18 @@ function resetView() {
 
 /* --- reactivity ---------------------------------------------------------- */
 
-watch(() => props.events, (events) => renderMarkers(events), { deep: true })
+watch(
+  () => props.events,
+  (events) => {
+    renderMarkers(events)
+    applyHeat()
+  },
+  { deep: true }
+)
+
+watch(() => props.styleKey, (key) => applyBasemap(key))
+
+watch(() => props.showHeat, () => applyHeat())
 
 watch(
   () => props.selectedId,

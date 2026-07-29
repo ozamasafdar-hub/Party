@@ -14,11 +14,31 @@ import EventCard from '@/components/events/EventCard.vue'
 import CreateEventModal from '@/components/events/CreateEventModal.vue'
 import EventListPanel from '@/components/events/EventListPanel.vue'
 import LoginPanel from '@/components/auth/LoginPanel.vue'
+import MapStyleControl from '@/components/map/MapStyleControl.vue'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
+import { BASEMAPS, DEFAULT_BASEMAP } from '@/config/map'
 
 const eventStore = useEventStore()
 const authStore = useAuthStore()
+
+const STYLE_KEY = 'wyn:map-style'
+const HEAT_KEY = 'wyn:map-heat'
+
+const readPref = (key) => {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+const writePref = (key, value) => {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    /* sandboxed iframe — preference just won't persist */
+  }
+}
 
 const liveMap = ref(null)
 const pickMode = ref(false)
@@ -26,6 +46,27 @@ const pickedCoords = ref(null)
 const showCreateModal = ref(false)
 const editingEvent = ref(null)
 const showList = ref(false)
+
+// Map style + heatmap, remembered between visits
+const storedStyle = readPref(STYLE_KEY)
+const mapStyle = ref(BASEMAPS[storedStyle] ? storedStyle : DEFAULT_BASEMAP)
+const showHeat = ref(readPref(HEAT_KEY) === '1')
+const showStylePanel = ref(false)
+
+function setMapStyle(key) {
+  mapStyle.value = key
+  writePref(STYLE_KEY, key)
+}
+
+function setHeat(on) {
+  showHeat.value = on
+  writePref(HEAT_KEY, on ? '1' : '0')
+}
+
+function onTileFallback() {
+  // Raster tiles unreachable — the map switched itself to the chart
+  mapStyle.value = 'chart'
+}
 
 // Sign-in modal — opened at the moment a visitor tries a members-only
 // action; the pending action resumes automatically after login
@@ -134,8 +175,11 @@ function toggleList() {
       :events="eventStore.visibleEvents"
       :selected-id="eventStore.selectedEventId"
       :pick-mode="pickMode"
+      :style-key="mapStyle"
+      :show-heat="showHeat"
       @select="onSelect"
       @pick="onPick"
+      @fallback="onTileFallback"
     />
 
     <TopBar @signin="openLogin('')" />
@@ -152,7 +196,28 @@ function toggleList() {
       >
         📋
       </button>
+      <button
+        class="map-view__ctrl glass-panel"
+        :class="{ 'map-view__ctrl--active': showStylePanel }"
+        title="Map style"
+        @click="showStylePanel = !showStylePanel"
+      >
+        🌍
+      </button>
     </div>
+
+    <!-- Map style picker -->
+    <Transition name="fade">
+      <div v-if="showStylePanel" class="map-view__style">
+        <MapStyleControl
+          :style-key="mapStyle"
+          :show-heat="showHeat"
+          @update:style="setMapStyle"
+          @update:heat="setHeat"
+          @close="showStylePanel = false"
+        />
+      </div>
+    </Transition>
 
     <!-- Quick-post -->
     <div class="map-view__fab-area">
@@ -281,6 +346,20 @@ function toggleList() {
   left: 50%;
   bottom: max(18px, env(safe-area-inset-bottom));
   transform: translateX(-50%);
+}
+
+.map-view__style {
+  position: absolute;
+  z-index: 45;
+  right: 72px;
+  bottom: 190px;
+}
+
+@media (max-width: 520px) {
+  .map-view__style {
+    right: 60px;
+    bottom: 108px;
+  }
 }
 
 .map-view__login-backdrop {

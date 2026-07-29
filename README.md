@@ -159,6 +159,10 @@ Party/
 
 ## 🗺️ Basemap data credits
 
+The map ships four styles — Night and Day (CARTO retina tiles), Satellite
+(Esri World Imagery with a CARTO label overlay), and Chart — plus an
+event-density heatmap toggle.
+
 When raster tiles are unavailable, the app renders a bundled vector basemap
 of Qatar built from open data: coastline from
 [geoBoundaries](https://www.geoboundaries.org) (CC BY 4.0), highways and

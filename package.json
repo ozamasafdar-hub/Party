@@ -13,6 +13,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.111.0",
     "leaflet": "^1.9.4",
+    "leaflet.heat": "^0.2.0",
     "leaflet.markercluster": "^1.5.3",
     "pinia": "^2.1.7",
     "vue": "^3.4.21",
