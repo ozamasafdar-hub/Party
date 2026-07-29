@@ -7,10 +7,11 @@ const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     {
+      // The map is public — anyone can browse events. Joining, hosting,
+      // and the profile are the members-only actions.
       path: '/',
       name: 'map',
-      component: () => import('@/views/MapView.vue'),
-      meta: { requiresAuth: true }
+      component: () => import('@/views/MapView.vue')
     },
     {
       path: '/login',

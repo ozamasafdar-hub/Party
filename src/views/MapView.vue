@@ -13,9 +13,12 @@ import TopBar from '@/components/layout/TopBar.vue'
 import EventCard from '@/components/events/EventCard.vue'
 import CreateEventModal from '@/components/events/CreateEventModal.vue'
 import EventListPanel from '@/components/events/EventListPanel.vue'
+import LoginPanel from '@/components/auth/LoginPanel.vue'
 import { useEventStore } from '@/stores/eventStore'
+import { useAuthStore } from '@/stores/authStore'
 
 const eventStore = useEventStore()
+const authStore = useAuthStore()
 
 const liveMap = ref(null)
 const pickMode = ref(false)
@@ -23,6 +26,13 @@ const pickedCoords = ref(null)
 const showCreateModal = ref(false)
 const editingEvent = ref(null)
 const showList = ref(false)
+
+// Sign-in modal — opened at the moment a visitor tries a members-only
+// action; the pending action resumes automatically after login
+const showLogin = ref(false)
+const loginPrompt = ref('')
+const pendingJoinId = ref(null)
+const pendingCreate = ref(false)
 
 const selectedEvent = computed(() => eventStore.selectedEvent)
 
@@ -41,10 +51,46 @@ function onSelect(eventId) {
 }
 
 function startPicking() {
+  if (!authStore.isAuthenticated) {
+    openLogin('Sign in to host your own event on the map.', { create: true })
+    return
+  }
   eventStore.clearSelection()
   showList.value = false
   pickMode.value = true
   pickedCoords.value = null
+}
+
+function openLogin(prompt, { joinId = null, create = false } = {}) {
+  loginPrompt.value = prompt
+  pendingJoinId.value = joinId
+  pendingCreate.value = create
+  showLogin.value = true
+}
+
+function closeLogin() {
+  showLogin.value = false
+  pendingJoinId.value = null
+  pendingCreate.value = false
+}
+
+async function onLoginSuccess() {
+  const joinId = pendingJoinId.value
+  const create = pendingCreate.value
+  closeLogin()
+  if (joinId) {
+    try {
+      await eventStore.rsvp(joinId, authStore.currentUser.id)
+    } catch {
+      /* event filled up meanwhile — the open card shows the live state */
+    }
+  } else if (create) {
+    startPicking()
+  }
+}
+
+function onJoinLoginRequired() {
+  openLogin('Sign in to join this event.', { joinId: selectedEvent.value?.id })
 }
 
 function cancelPicking() {
@@ -92,7 +138,7 @@ function toggleList() {
       @pick="onPick"
     />
 
-    <TopBar />
+    <TopBar @signin="openLogin('')" />
 
     <!-- Floating map controls -->
     <div class="map-view__controls">
@@ -131,7 +177,22 @@ function toggleList() {
     <!-- Event bottom sheet -->
     <Transition name="slide-up">
       <div v-if="selectedEvent" class="map-view__sheet">
-        <EventCard :event="selectedEvent" @close="eventStore.clearSelection()" @edit="onEdit" />
+        <EventCard
+          :event="selectedEvent"
+          @close="eventStore.clearSelection()"
+          @edit="onEdit"
+          @login-required="onJoinLoginRequired"
+        />
+      </div>
+    </Transition>
+
+    <!-- Sign-in modal (members-only actions) -->
+    <Transition name="fade">
+      <div v-if="showLogin" class="map-view__login-backdrop" @click.self="closeLogin">
+        <div class="map-view__login glass-panel">
+          <button class="map-view__login-close" aria-label="Close" @click="closeLogin">✕</button>
+          <LoginPanel :prompt="loginPrompt" @success="onLoginSuccess" />
+        </div>
       </div>
     </Transition>
 
@@ -220,6 +281,39 @@ function toggleList() {
   left: 50%;
   bottom: max(18px, env(safe-area-inset-bottom));
   transform: translateX(-50%);
+}
+
+.map-view__login-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 8, 15, 0.6);
+  backdrop-filter: blur(4px);
+  padding: 16px;
+}
+
+.map-view__login {
+  position: relative;
+  width: min(400px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 32px 30px;
+}
+
+.map-view__login-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  font-size: 13px;
+  z-index: 1;
 }
 
 /* Keep horizontal centering while the slide-up transition animates */

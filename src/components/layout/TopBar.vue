@@ -7,6 +7,8 @@ import MemberAvatar from '@/components/ui/MemberAvatar.vue'
 
 const eventStore = useEventStore()
 const authStore = useAuthStore()
+
+defineEmits(['signin'])
 </script>
 
 <template>
@@ -40,6 +42,9 @@ const authStore = useAuthStore()
     >
       <MemberAvatar :member="authStore.currentUser" :size="38" />
     </RouterLink>
+    <button v-else class="top-bar__signin glass-panel" @click="$emit('signin')">
+      Sign in
+    </button>
   </header>
 </template>
 
@@ -119,6 +124,19 @@ const authStore = useAuthStore()
   padding: 5px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+.top-bar__signin {
+  padding: 12px 18px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+  color: var(--text-primary);
+}
+
+.top-bar__signin:hover {
+  background: var(--bg-700);
 }
 
 @media (max-width: 720px) {

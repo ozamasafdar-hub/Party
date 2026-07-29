@@ -15,7 +15,7 @@ const props = defineProps({
   event: { type: Object, required: true }
 })
 
-const emit = defineEmits(['close', 'edit'])
+const emit = defineEmits(['close', 'edit', 'login-required'])
 
 const eventStore = useEventStore()
 const authStore = useAuthStore()
@@ -58,6 +58,11 @@ const capacityPct = computed(() =>
 
 async function toggleRsvp() {
   if (busy.value) return
+  // Visitors can browse freely — joining is the members-only moment
+  if (!authStore.isAuthenticated) {
+    emit('login-required')
+    return
+  }
   busy.value = true
   error.value = ''
   try {
