@@ -295,10 +295,12 @@ watch(
   }
 )
 
+// The draft pin intentionally survives leaving pick mode — it stays
+// visible while the create form is back up; the parent clears it
+// explicitly on save/close via the exposed clearDraftPin()
 watch(
   () => props.pickMode,
   (picking) => {
-    if (!picking) clearDraftPin()
     mapEl.value.style.cursor = picking ? 'crosshair' : ''
   }
 )

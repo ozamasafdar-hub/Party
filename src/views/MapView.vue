@@ -46,6 +46,7 @@ const writePref = (key, value) => {
 
 const liveMap = ref(null)
 const pickMode = ref(false)
+const pickingLocation = ref(false) // form hidden while the member taps the spot
 const pickedCoords = ref(null)
 const showCreateModal = ref(false)
 const editingEvent = ref(null)
@@ -126,15 +127,28 @@ function onSelect(eventId) {
   eventStore.select(eventId)
 }
 
-function startPicking() {
+/** Form first — the location is picked from inside it. */
+function openCreate() {
   if (!authStore.isAuthenticated) {
     openLogin('Sign in to host your own event on the map.', { create: true })
     return
   }
   eventStore.clearSelection()
   showList.value = false
-  pickMode.value = true
+  editingEvent.value = null
   pickedCoords.value = null
+  showCreateModal.value = true
+}
+
+/** "Pick on map" inside the form: hide it (state kept) and enter pick mode. */
+function startPickingLocation() {
+  pickingLocation.value = true
+  pickMode.value = true
+}
+
+function stopPickingLocation() {
+  pickingLocation.value = false
+  pickMode.value = false
 }
 
 function openLogin(prompt, { joinId = null, create = false } = {}) {
@@ -161,7 +175,7 @@ async function onLoginSuccess() {
       /* event filled up meanwhile — the open card shows the live state */
     }
   } else if (create) {
-    startPicking()
+    openCreate()
   }
 }
 
@@ -169,27 +183,21 @@ function onJoinLoginRequired() {
   openLogin('Sign in to join this event.', { joinId: selectedEvent.value?.id })
 }
 
-function cancelPicking() {
-  pickMode.value = false
-  pickedCoords.value = null
-}
-
 function onPick(coords) {
   pickedCoords.value = coords
-  showCreateModal.value = true
+  stopPickingLocation() // back to the form, pin stays visible on the map
 }
 
 function onModalClose() {
   showCreateModal.value = false
   editingEvent.value = null
-  // Keep pick mode active so the member can adjust the pin position
+  pickedCoords.value = null
+  stopPickingLocation()
+  liveMap.value?.clearDraftPin()
 }
 
 function onSaved() {
-  showCreateModal.value = false
-  editingEvent.value = null
-  pickMode.value = false
-  liveMap.value?.clearDraftPin()
+  onModalClose()
 }
 
 function onEdit(event) {
@@ -278,13 +286,13 @@ function toggleList() {
     <!-- Quick-post -->
     <div class="map-view__fab-area">
       <Transition name="fade">
-        <div v-if="pickMode && !showCreateModal" class="map-view__hint glass-panel">
-          Tap anywhere on the map to drop your event pin
-          <button class="map-view__hint-cancel" @click="cancelPicking">Cancel</button>
+        <div v-if="pickingLocation" class="map-view__hint glass-panel">
+          Tap the map where your event happens
+          <button class="map-view__hint-cancel" @click="stopPickingLocation">Back to form</button>
         </div>
       </Transition>
-      <button v-if="!pickMode" class="btn-primary map-view__fab" @click="startPicking">
-        ＋ Drop an event
+      <button v-if="!pickMode && !showCreateModal" class="btn-primary map-view__fab" @click="openCreate">
+        ＋ Create an event
       </button>
     </div>
 
@@ -317,14 +325,16 @@ function toggleList() {
       </div>
     </Transition>
 
-    <!-- Quick-post / edit form -->
+    <!-- Quick-post / edit form (hidden, state intact, while picking the spot) -->
     <Transition name="fade">
       <CreateEventModal
-        v-if="showCreateModal && (pickedCoords || editingEvent)"
+        v-if="showCreateModal"
+        v-show="!pickingLocation"
         :coords="pickedCoords"
         :event="editingEvent"
         @close="onModalClose"
         @created="onSaved"
+        @pick-location="startPickingLocation"
       />
     </Transition>
   </div>

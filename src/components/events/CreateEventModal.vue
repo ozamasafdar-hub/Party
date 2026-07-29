@@ -1,9 +1,10 @@
 <script setup>
 /**
  * CreateEventModal — the quick-post flow, and edit mode for hosts.
- * Creating: the member dropped a pin on the map (pick mode) and this form
- * captures Title, Description, Category, Date/Time, Duration and Max
- * Capacity. Editing: same form prefilled from the existing event.
+ * The form opens first; the location is set from inside it via the
+ * "Pick on map" button (which temporarily hides the form, keeps its
+ * state, and returns once the member taps the spot). Editing: same form
+ * prefilled from the existing event, location re-pickable.
  */
 import { computed, reactive, ref } from 'vue'
 import { CATEGORIES } from '@/config/categories'
@@ -13,18 +14,21 @@ import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
 
 const props = defineProps({
-  coords: { type: Object, default: null }, // { lat, lng } — create mode
+  coords: { type: Object, default: null }, // { lat, lng } — freshly picked
   event: { type: Object, default: null } // existing event — edit mode
 })
 
-const emit = defineEmits(['close', 'created'])
+const emit = defineEmits(['close', 'created', 'pick-location'])
 
 const eventStore = useEventStore()
 const authStore = useAuthStore()
 
 const isEditing = computed(() => !!props.event)
-const pin = computed(() =>
-  props.event ? { lat: props.event.lat, lng: props.event.lng } : props.coords
+// A fresh pick wins; otherwise fall back to the event's current spot
+const pin = computed(
+  () =>
+    props.coords ??
+    (props.event ? { lat: props.event.lat, lng: props.event.lng } : null)
 )
 
 const form = reactive({
@@ -70,6 +74,7 @@ async function submit() {
   error.value = ''
   if (!form.title.trim()) return (error.value = 'Give your event a title.')
   if (!form.locationName.trim()) return (error.value = 'Name the place (e.g. "B Square Mall").')
+  if (!pin.value) return (error.value = 'Set the location — tap "Pick on map".')
   const startsAt = new Date(form.startsAtLocal)
   if (Number.isNaN(startsAt.getTime())) return (error.value = 'Pick a valid date and time.')
 
@@ -103,10 +108,7 @@ async function submit() {
 <template>
   <div class="modal-backdrop" @click.self="emit('close')">
     <form class="create-modal glass-panel" @submit.prevent="submit">
-      <h2 class="create-modal__title">{{ isEditing ? 'Edit event' : 'Drop an event pin' }}</h2>
-      <p class="create-modal__coords">
-        📍 Pinned at {{ pin.lat.toFixed(4) }}, {{ pin.lng.toFixed(4) }}
-      </p>
+      <h2 class="create-modal__title">{{ isEditing ? 'Edit event' : 'Create an event' }}</h2>
 
       <label class="field-label" for="ev-title">Event title</label>
       <input
@@ -168,6 +170,19 @@ async function submit() {
         placeholder='e.g. "Porto Arabia, The Pearl"'
       />
 
+      <label class="field-label">Location on the map</label>
+      <div class="create-modal__pin-row">
+        <span v-if="pin" class="create-modal__coords">
+          📍 {{ pin.lat.toFixed(4) }}, {{ pin.lng.toFixed(4) }}
+        </span>
+        <span v-else class="create-modal__coords create-modal__coords--empty">
+          📍 Not set yet
+        </span>
+        <button type="button" class="btn-ghost create-modal__pin-btn" @click="emit('pick-location')">
+          {{ pin ? '🗺️ Change on map' : '🗺️ Pick on map' }}
+        </button>
+      </div>
+
       <div class="create-modal__row">
         <div>
           <label class="field-label" for="ev-when">Date &amp; time</label>
@@ -223,9 +238,25 @@ async function submit() {
 }
 
 .create-modal__coords {
-  margin: 6px 0 18px;
   font-size: 13px;
   color: var(--gold);
+}
+
+.create-modal__coords--empty {
+  color: var(--text-secondary);
+}
+
+.create-modal__pin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.create-modal__pin-btn {
+  padding: 9px 16px;
+  font-size: 13px;
+  flex-shrink: 0;
 }
 
 .create-modal .field-label {
