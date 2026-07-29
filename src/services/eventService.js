@@ -147,10 +147,8 @@ const demo = {
 
   subscribeToEvents(callback) {
     listeners.add(callback)
-    const timer = startActivitySimulator()
     return () => {
       listeners.delete(callback)
-      clearInterval(timer)
     }
   },
 
@@ -183,28 +181,6 @@ const demo = {
     messageListeners.add(filtered)
     return () => messageListeners.delete(filtered)
   }
-}
-
-/**
- * Demo-only: simulates other members RSVPing so the map feels live.
- * Newest events first — a member's fresh event visibly attracts guests.
- */
-function startActivitySimulator() {
-  let tick = 0
-  return setInterval(() => {
-    const open = db.events.filter(
-      (e) => !e.cancelled && e.attendeeIds.length < e.maxCapacity
-    )
-    if (!open.length) return
-    const event = open[open.length - 1 - (tick % open.length)]
-    const joiner = db.members.find(
-      (m) => !event.attendeeIds.includes(m.id) && !event.waitlistIds.includes(m.id)
-    )
-    tick += 1
-    if (!joiner) return
-    event.attendeeIds.push(joiner.id)
-    emit({ type: 'UPDATE', event: clone(event) })
-  }, 25000)
 }
 
 /* ========================================================================== */
