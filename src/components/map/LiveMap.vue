@@ -235,4 +235,19 @@ defineExpose({ locateMe, resetView, clearDraftPin })
   color: rgba(244, 246, 251, 0.85);
   letter-spacing: 0.18em;
 }
+
+.live-map :deep(.place-label__text--zone) {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: rgba(154, 165, 184, 0.6);
+}
+
+.live-map :deep(.place-label__text--hood) {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: rgba(176, 188, 208, 0.78);
+}
 </style>

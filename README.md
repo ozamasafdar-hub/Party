@@ -158,6 +158,16 @@ Party/
 
 ---
 
+## 🗺️ Basemap data credits
+
+When raster tiles are unavailable, the app renders a bundled vector basemap
+of Qatar built from open data: coastline from
+[geoBoundaries](https://www.geoboundaries.org) (CC BY 4.0), highways and
+urban areas from [Natural Earth](https://www.naturalearthdata.com) (public
+domain), and zone/neighbourhood/locality boundaries from
+[Who's On First](https://whosonfirst.org) (CC0/CC BY). Raster tiles are
+© OpenStreetMap contributors, style © CARTO.
+
 ## 🔌 Going to production (Supabase)
 
 1. Create a Supabase project and run `docs/database-schema.sql`.
