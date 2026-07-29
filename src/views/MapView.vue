@@ -20,12 +20,14 @@ import MapSearchBar from '@/components/map/MapSearchBar.vue'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useNotifStore } from '@/stores/notifStore'
+import { useFollowStore } from '@/stores/followStore'
 import { BASEMAPS, DEFAULT_BASEMAP } from '@/config/map'
 
 const route = useRoute()
 const eventStore = useEventStore()
 const authStore = useAuthStore()
 const notifStore = useNotifStore()
+const followStore = useFollowStore()
 
 const STYLE_KEY = 'wyn:map-style'
 const HEAT_KEY = 'wyn:map-heat'
@@ -106,6 +108,7 @@ let soonTimer = null
 
 onMounted(async () => {
   await eventStore.load()
+  if (authStore.currentUser) followStore.load(authStore.currentUser.id)
   // Shared link: /e/<id> lands with that event's card open
   if (route.name === 'event-link' && route.params.id) {
     const exists = eventStore.events.some((e) => e.id === route.params.id)
@@ -170,6 +173,7 @@ async function onLoginSuccess() {
   const joinId = pendingJoinId.value
   const create = pendingCreate.value
   closeLogin()
+  followStore.load(authStore.currentUser.id)
   if (joinId) {
     try {
       await eventStore.smartJoin(joinId, authStore.currentUser.id)
@@ -317,7 +321,11 @@ function toggleList() {
     <!-- What's on feed -->
     <Transition name="slide-up">
       <div v-if="showList" class="map-view__list">
-        <EventListPanel @close="showList = false" @select="onSelect" />
+        <EventListPanel
+          @close="showList = false"
+          @select="onSelect"
+          @need-location="liveMap?.locateMe()"
+        />
       </div>
     </Transition>
 

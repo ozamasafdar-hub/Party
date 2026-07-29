@@ -21,6 +21,11 @@ import { MAP_OPTIONS, BASEMAPS, DEFAULT_BASEMAP, QATAR_CENTER } from '@/config/m
 import { buildEventIcon, buildDraftIcon } from './eventMarker'
 import { addVectorBasemap } from './vectorBasemap'
 import { isLive, formatWhen } from '@/utils/datetime'
+import { useEventStore } from '@/stores/eventStore'
+import { useFollowStore } from '@/stores/followStore'
+
+const eventStore = useEventStore()
+const followStore = useFollowStore()
 
 const props = defineProps({
   events: { type: Array, required: true },
@@ -167,7 +172,8 @@ function renderMarkers(events) {
     const state = {
       live: isLive(event),
       full: event.attendeeIds.length >= event.maxCapacity,
-      selected: event.id === props.selectedId
+      selected: event.id === props.selectedId,
+      friend: followStore.isFriendEvent(event)
     }
     const existing = markersById.get(event.id)
 
@@ -256,6 +262,7 @@ function locateMe() {
 }
 
 function onLocationFound(e) {
+  eventStore.setUserLocation({ lat: e.latlng.lat, lng: e.latlng.lng })
   if (!locationMarker) {
     locationMarker = L.marker(e.latlng, {
       interactive: false,
@@ -291,6 +298,12 @@ watch(
 watch(() => props.styleKey, (key) => applyBasemap(key))
 
 watch(() => props.showHeat, () => applyHeat())
+
+// Follow/unfollow re-styles pins (gold friend ring)
+watch(
+  () => followStore.followingIds,
+  () => renderMarkers(props.events)
+)
 
 watch(
   () => props.selectedId,

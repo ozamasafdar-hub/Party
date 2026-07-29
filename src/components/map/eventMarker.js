@@ -14,10 +14,15 @@ import { categoryOf } from '@/config/categories'
 const PIN_W = 46
 const PIN_H = 60
 
-export function buildEventIcon(event, { live = false, full = false, selected = false } = {}) {
+export function buildEventIcon(
+  event,
+  { live = false, full = false, selected = false, friend = false } = {}
+) {
   const { color, glyph } = categoryOf(event.category)
   const badgeColor = full ? '#f4587a' : '#2dd4a0'
   const count = event.attendeeIds.length
+  const stroke = selected ? '#ffffff' : friend ? '#d4af6a' : 'rgba(255,255,255,0.85)'
+  const strokeWidth = selected ? 3 : friend ? 2.5 : 1.5
 
   const pulse = live
     ? `<span class="event-pin__pulse" style="
@@ -32,8 +37,7 @@ export function buildEventIcon(event, { live = false, full = false, selected = f
          xmlns="http://www.w3.org/2000/svg" style="position:relative;display:block">
       <path d="M23 2C11.4 2 2 11.2 2 22.6 2 33 10 41.4 19.6 52.8c1.8 2.1 5 2.1 6.8 0
                C36 41.4 44 33 44 22.6 44 11.2 34.6 2 23 2Z"
-            fill="${color}" stroke="${selected ? '#ffffff' : 'rgba(255,255,255,0.85)'}"
-            stroke-width="${selected ? 3 : 1.5}"/>
+            fill="${color}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
       <circle cx="23" cy="21" r="14" fill="rgba(11,15,25,0.28)"/>
       <g transform="translate(13.4,11.4) scale(0.8)">
         <path d="${glyph}" fill="#ffffff"/>

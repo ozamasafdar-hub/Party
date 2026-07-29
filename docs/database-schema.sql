@@ -170,6 +170,17 @@ create table public.messages (
 create index messages_event_idx on public.messages (event_id, created_at);
 
 -- ----------------------------------------------------------------------------
+-- FOLLOWS — the social graph behind friend highlights
+-- ----------------------------------------------------------------------------
+create table public.follows (
+  follower_id uuid not null references public.profiles (id) on delete cascade,
+  followee_id uuid not null references public.profiles (id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  primary key (follower_id, followee_id),
+  check (follower_id <> followee_id)
+);
+
+-- ----------------------------------------------------------------------------
 -- "Events near me" RPC — the map calls this with the visible bounds' center
 -- ----------------------------------------------------------------------------
 create or replace function public.events_within_radius(
@@ -200,6 +211,7 @@ alter table public.profiles enable row level security;
 alter table public.events   enable row level security;
 alter table public.rsvps    enable row level security;
 alter table public.messages enable row level security;
+alter table public.follows  enable row level security;
 
 -- Only approved members can see anything
 create policy "approved members read profiles" on public.profiles
@@ -240,6 +252,14 @@ create policy "approved members read messages" on public.messages
   for select using (
     exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_approved)
   );
+
+create policy "approved members read follows" on public.follows
+  for select using (
+    exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_approved)
+  );
+
+create policy "members manage own follows" on public.follows
+  for all using (follower_id = auth.uid()) with check (follower_id = auth.uid());
 
 -- Only people on the event (host, going, or waitlisted) can post
 create policy "attendees post messages" on public.messages

@@ -1,29 +1,53 @@
 <script setup>
 /**
- * ProfileView — member profile: avatar, name, and history of
- * hosted / attended events.
+ * ProfileView — a member profile: avatar, name, bio, and history of
+ * hosted / attending events. Shows your own profile (with Edit + Sign
+ * out) or any other member's (with Follow / Unfollow), via /profile/:id.
  */
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useEventStore } from '@/stores/eventStore'
+import { useFollowStore } from '@/stores/followStore'
 import { categoryOf } from '@/config/categories'
 import { formatWhen } from '@/utils/datetime'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
 import EditProfileModal from '@/components/profile/EditProfileModal.vue'
 
+const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const eventStore = useEventStore()
+const followStore = useFollowStore()
 
-const user = computed(() => authStore.currentUser)
-const hosted = computed(() => eventStore.hostedBy(user.value.id))
-const attended = computed(() => eventStore.attendedBy(user.value.id))
+const me = computed(() => authStore.currentUser)
+const viewedId = computed(() => route.params.id || me.value.id)
+const isSelf = computed(() => viewedId.value === me.value.id)
+
+const member = computed(() =>
+  isSelf.value ? me.value : eventStore.memberById(viewedId.value)
+)
+
+const hosted = computed(() => eventStore.hostedBy(viewedId.value))
+const attended = computed(() => eventStore.attendedBy(viewedId.value))
+const following = computed(() => followStore.isFollowing(viewedId.value))
+
 const showEdit = ref(false)
+const followBusy = ref(false)
 
-onMounted(() => {
+onMounted(async () => {
   if (!eventStore.events.length) eventStore.load()
+  await followStore.load(me.value.id)
 })
+
+async function toggleFollow() {
+  followBusy.value = true
+  try {
+    await followStore.toggle(me.value.id, viewedId.value)
+  } finally {
+    followBusy.value = false
+  }
+}
 
 function openEvent(eventId) {
   eventStore.select(eventId)
@@ -32,7 +56,7 @@ function openEvent(eventId) {
 
 function logout() {
   authStore.logout()
-  router.push({ name: 'login' })
+  router.push({ name: 'map' })
 }
 </script>
 
@@ -43,48 +67,65 @@ function logout() {
         ← Back to map
       </button>
 
-      <header class="profile__header glass-panel">
-        <MemberAvatar :member="user" :size="72" />
-        <div class="profile__identity">
-          <h1 class="profile__name">{{ user.name }}</h1>
-          <p v-if="user.bio" class="profile__bio">{{ user.bio }}</p>
-          <p class="profile__stats">
-            <span><strong>{{ hosted.length }}</strong> hosted</span>
-            <span><strong>{{ attended.length }}</strong> attended</span>
-          </p>
-        </div>
-        <div class="profile__actions">
-          <button class="btn-ghost profile__edit" @click="showEdit = true">✏️ Edit profile</button>
-          <button class="btn-ghost profile__logout" @click="logout">Sign out</button>
-        </div>
-      </header>
+      <template v-if="member">
+        <header class="profile__header glass-panel">
+          <MemberAvatar :member="member" :size="72" />
+          <div class="profile__identity">
+            <h1 class="profile__name">{{ member.name }}</h1>
+            <p v-if="member.bio" class="profile__bio">{{ member.bio }}</p>
+            <p class="profile__stats">
+              <span><strong>{{ hosted.length }}</strong> hosted</span>
+              <span><strong>{{ attended.length }}</strong> attending</span>
+            </p>
+          </div>
+          <div class="profile__actions">
+            <template v-if="isSelf">
+              <button class="btn-ghost profile__edit" @click="showEdit = true">✏️ Edit profile</button>
+              <button class="btn-ghost profile__logout" @click="logout">Sign out</button>
+            </template>
+            <button
+              v-else
+              class="profile__follow"
+              :class="following ? 'btn-ghost' : 'btn-primary'"
+              :disabled="followBusy"
+              @click="toggleFollow"
+            >
+              {{ following ? '✓ Following' : '⭐ Follow' }}
+            </button>
+          </div>
+        </header>
 
-      <section v-for="group in [
-          { title: '🎉 Hosting', events: hosted, empty: 'You haven\'t hosted anything yet — drop a pin on the map!' },
-          { title: '✅ Attending', events: attended, empty: 'No RSVPs yet. Tap a pin on the map to join an event.' }
-        ]"
-        :key="group.title"
-        class="profile__section"
-      >
-        <h2 class="profile__section-title">{{ group.title }}</h2>
-        <p v-if="!group.events.length" class="profile__empty glass-panel">{{ group.empty }}</p>
-        <button
-          v-for="event in group.events"
-          :key="event.id"
-          class="profile__event glass-panel"
-          @click="openEvent(event.id)"
+        <section v-for="group in [
+            { title: '🎉 Hosting', events: hosted, empty: isSelf ? 'You haven\'t hosted anything yet — create an event from the map!' : 'No events hosted yet.' },
+            { title: '✅ Attending', events: attended, empty: isSelf ? 'No RSVPs yet. Tap a pin on the map to join an event.' : 'Not attending anything yet.' }
+          ]"
+          :key="group.title"
+          class="profile__section"
         >
-          <span class="profile__event-dot" :style="{ background: categoryOf(event.category).color }" />
-          <span class="profile__event-body">
-            <span class="profile__event-title">{{ event.title }}</span>
-            <span class="profile__event-meta">
-              {{ event.locationName }} · {{ formatWhen(event.startsAt) }} ·
-              {{ event.attendeeIds.length }}/{{ event.maxCapacity }} going
+          <h2 class="profile__section-title">{{ group.title }}</h2>
+          <p v-if="!group.events.length" class="profile__empty glass-panel">{{ group.empty }}</p>
+          <button
+            v-for="event in group.events"
+            :key="event.id"
+            class="profile__event glass-panel"
+            @click="openEvent(event.id)"
+          >
+            <span class="profile__event-dot" :style="{ background: categoryOf(event.category).color }" />
+            <span class="profile__event-body">
+              <span class="profile__event-title">{{ event.title }}</span>
+              <span class="profile__event-meta">
+                {{ event.locationName }} · {{ formatWhen(event.startsAt) }} ·
+                {{ event.attendeeIds.length }}/{{ event.maxCapacity }} going
+              </span>
             </span>
-          </span>
-          <span class="profile__event-arrow">→</span>
-        </button>
-      </section>
+            <span class="profile__event-arrow">→</span>
+          </button>
+        </section>
+      </template>
+
+      <p v-else class="profile__empty glass-panel">
+        Member not found — they may not have joined any events yet.
+      </p>
     </div>
 
     <Transition name="fade">

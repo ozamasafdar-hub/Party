@@ -180,6 +180,38 @@ const demo = {
     }
     messageListeners.add(filtered)
     return () => messageListeners.delete(filtered)
+  },
+
+  /* follows --------------------------------------------------------------- */
+
+  async listFollowing(userId) {
+    try {
+      return JSON.parse(localStorage.getItem(`wyn:follows:${userId}`)) || []
+    } catch {
+      return []
+    }
+  },
+
+  async follow(userId, targetId) {
+    const ids = new Set(await demo.listFollowing(userId))
+    ids.add(targetId)
+    try {
+      localStorage.setItem(`wyn:follows:${userId}`, JSON.stringify([...ids]))
+    } catch {
+      /* sandboxed iframe — follow just won't persist */
+    }
+    return [...ids]
+  },
+
+  async unfollow(userId, targetId) {
+    const ids = new Set(await demo.listFollowing(userId))
+    ids.delete(targetId)
+    try {
+      localStorage.setItem(`wyn:follows:${userId}`, JSON.stringify([...ids]))
+    } catch {
+      /* sandboxed iframe — follow just won't persist */
+    }
+    return [...ids]
   }
 }
 
@@ -279,7 +311,7 @@ const live = {
   async listMembers() {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, full_name, avatar_url')
+      .select('id, full_name, avatar_url, bio')
     if (error) throw friendly(error)
     return data.map(toMember)
   },
@@ -437,6 +469,35 @@ const live = {
       )
       .subscribe()
     return () => supabase.removeChannel(channel)
+  },
+
+  /* follows --------------------------------------------------------------- */
+
+  async listFollowing(userId) {
+    const { data, error } = await supabase
+      .from('follows')
+      .select('followee_id')
+      .eq('follower_id', userId)
+    if (error) throw friendly(error)
+    return data.map((r) => r.followee_id)
+  },
+
+  async follow(userId, targetId) {
+    const { error } = await supabase
+      .from('follows')
+      .upsert({ follower_id: userId, followee_id: targetId })
+    if (error) throw friendly(error)
+    return live.listFollowing(userId)
+  },
+
+  async unfollow(userId, targetId) {
+    const { error } = await supabase
+      .from('follows')
+      .delete()
+      .eq('follower_id', userId)
+      .eq('followee_id', targetId)
+    if (error) throw friendly(error)
+    return live.listFollowing(userId)
   }
 }
 
@@ -456,3 +517,6 @@ export const subscribeToEvents = (...a) => backend.subscribeToEvents(...a)
 export const listMessages = (...a) => backend.listMessages(...a)
 export const sendMessage = (...a) => backend.sendMessage(...a)
 export const subscribeToMessages = (...a) => backend.subscribeToMessages(...a)
+export const listFollowing = (...a) => backend.listFollowing(...a)
+export const follow = (...a) => backend.follow(...a)
+export const unfollow = (...a) => backend.unfollow(...a)

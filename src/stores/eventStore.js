@@ -21,6 +21,8 @@ export const useEventStore = defineStore('events', {
     selectedEventId: null,
     activeCategory: null, // null = show every category
     timeWindow: 'all', // 'all' | 'now' | 'today' | 'week'
+    onlyMine: false, // just events I host / attend / wait on
+    userLocation: null, // { lat, lng } once the member shares it
     loading: false,
     unsubscribe: null
   }),
@@ -32,12 +34,24 @@ export const useEventStore = defineStore('events', {
       const endOfToday = new Date(now)
       endOfToday.setHours(23, 59, 59, 999)
       const weekAhead = new Date(now.getTime() + 7 * 86400000)
+      const authStore = useAuthStore()
+      const meId = authStore.currentUser?.id
       return state.events.filter((e) => {
         if (hasEnded(e, now)) return false
         if (state.activeCategory && e.category !== state.activeCategory) return false
         if (state.timeWindow === 'now' && !isLive(e, now)) return false
         if (state.timeWindow === 'today' && new Date(e.startsAt) > endOfToday) return false
         if (state.timeWindow === 'week' && new Date(e.startsAt) > weekAhead) return false
+        if (
+          state.onlyMine &&
+          !(
+            e.hostId === meId ||
+            e.attendeeIds.includes(meId) ||
+            (e.waitlistIds || []).includes(meId)
+          )
+        ) {
+          return false
+        }
         return true
       })
     },
@@ -139,6 +153,14 @@ export const useEventStore = defineStore('events', {
 
     setTimeWindow(window) {
       this.timeWindow = window
+    },
+
+    setOnlyMine(on) {
+      this.onlyMine = on
+    },
+
+    setUserLocation(location) {
+      this.userLocation = location
     },
 
     async create(data, host) {

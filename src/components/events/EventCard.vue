@@ -5,11 +5,15 @@
  * with waitlist, the Join / RSVP action, and the event chat thread.
  */
 import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useChatStore } from '@/stores/chatStore'
+import { useFollowStore } from '@/stores/followStore'
 import { categoryOf } from '@/config/categories'
 import { formatWhen, formatDuration, formatCountdown, formatTime, isLive } from '@/utils/datetime'
+import { googleCalendarUrl, icsDataUrl } from '@/utils/calendar'
+import { distanceKm, formatDistance } from '@/utils/geo'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
 
 const props = defineProps({
@@ -21,11 +25,13 @@ const emit = defineEmits(['close', 'edit', 'login-required'])
 const eventStore = useEventStore()
 const authStore = useAuthStore()
 const chatStore = useChatStore()
+const followStore = useFollowStore()
 
 const busy = ref(false)
 const error = ref('')
 const confirmingCancel = ref(false)
 const shareLabel = ref('Share')
+const showCalendar = ref(false)
 const chatOpen = ref(false)
 const chatDraft = ref('')
 const chatBody = ref(null)
@@ -83,6 +89,19 @@ const directionsUrl = computed(
 const whatsappUrl = computed(
   () =>
     `https://wa.me/?text=${encodeURIComponent(`${props.event.title} — ${formatWhen(props.event.startsAt)} 📍 ${props.event.locationName}\n${shareUrl.value}`)}`
+)
+
+const googleUrl = computed(() => googleCalendarUrl(props.event, shareUrl.value))
+const icsUrl = computed(() => icsDataUrl(props.event, shareUrl.value))
+
+const distanceText = computed(() => {
+  const here = eventStore.userLocation
+  if (!here) return ''
+  return `${formatDistance(distanceKm(here, props.event))} away`
+})
+
+const friendsGoing = computed(() =>
+  followStore.friendsIn(props.event).filter((id) => id !== meId.value)
 )
 
 /* --- join / waitlist ------------------------------------------------------ */
@@ -217,7 +236,8 @@ onBeforeUnmount(() => chatStore.close())
       <h2 class="event-card__title">{{ event.title }}</h2>
       <p class="event-card__meta">
         📍 {{ event.locationName }} &nbsp;·&nbsp; 🕐 {{ formatWhen(event.startsAt) }}
-        &nbsp;·&nbsp; ⏳ {{ formatDuration(event.durationMinutes) }}
+        &nbsp;·&nbsp; ⏳ {{ formatDuration(event.durationMinutes)
+        }}<template v-if="distanceText"> &nbsp;·&nbsp; 📏 {{ distanceText }}</template>
       </p>
     </header>
 
@@ -227,15 +247,34 @@ onBeforeUnmount(() => chatStore.close())
       <button class="event-card__mini" @click="share">🔗 {{ shareLabel }}</button>
       <a class="event-card__mini" :href="whatsappUrl" target="_blank" rel="noopener">💬 WhatsApp</a>
       <a class="event-card__mini" :href="directionsUrl" target="_blank" rel="noopener">🧭 Directions</a>
+      <button class="event-card__mini" @click="showCalendar = !showCalendar">📅 Calendar</button>
     </div>
 
-    <div class="event-card__host">
+    <div v-if="showCalendar" class="event-card__calendar">
+      <a class="event-card__mini" :href="googleUrl" target="_blank" rel="noopener">
+        Google Calendar
+      </a>
+      <a class="event-card__mini" :href="icsUrl" download="wyn-event.ics">
+        Download .ics (Apple / Outlook)
+      </a>
+    </div>
+
+    <RouterLink
+      class="event-card__host"
+      :to="{ name: 'profile', params: { id: event.hostId } }"
+      title="View host profile"
+    >
       <MemberAvatar :member="host" :size="34" />
       <div>
         <div class="event-card__host-name">{{ host.name }}</div>
-        <div class="event-card__host-role">Host</div>
+        <div class="event-card__host-role">Host · view profile →</div>
       </div>
-    </div>
+    </RouterLink>
+
+    <p v-if="friendsGoing.length" class="event-card__friends">
+      ⭐ {{ friendsGoing.length }} friend{{ friendsGoing.length === 1 ? '' : 's' }} going —
+      {{ friendsGoing.map((id) => resolveMember(id).name.split(' ')[0]).join(', ') }}
+    </p>
 
     <section class="event-card__guestlist">
       <div class="event-card__guestlist-head">
@@ -254,13 +293,14 @@ onBeforeUnmount(() => chatStore.close())
         />
       </div>
       <div class="event-card__avatars">
-        <MemberAvatar
+        <RouterLink
           v-for="guest in guests"
           :key="guest.id"
-          :member="guest"
-          :size="30"
+          :to="{ name: 'profile', params: { id: guest.id } }"
           :title="guest.name"
-        />
+        >
+          <MemberAvatar :member="guest" :size="30" />
+        </RouterLink>
       </div>
     </section>
 
@@ -449,8 +489,33 @@ onBeforeUnmount(() => chatStore.close())
 
 .event-card__share-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 14px;
+}
+
+.event-card__share-row > .event-card__mini {
+  flex: 1 1 45%;
+}
+
+.event-card__calendar {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.event-card__calendar > .event-card__mini {
+  flex: 1;
+}
+
+.event-card__friends {
+  margin-top: 12px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(212, 175, 106, 0.1);
+  color: var(--gold);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .event-card__mini {
@@ -483,6 +548,11 @@ onBeforeUnmount(() => chatStore.close())
   padding: 10px 12px;
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.045);
+  transition: background 0.15s ease;
+}
+
+.event-card__host:hover {
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .event-card__host-name {

@@ -1,22 +1,51 @@
 <script setup>
 /**
  * EventListPanel — browsable feed of upcoming events alongside the map.
- * Tapping a row selects the event (the map flies to its pin).
+ * Filters: time window (All/Now/Today/Week), "Mine" (my plans), and a
+ * "Nearest" sort once the member shares their location. Friends' events
+ * get a ⭐. Tapping a row selects the event (the map flies to its pin).
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useEventStore } from '@/stores/eventStore'
+import { useAuthStore } from '@/stores/authStore'
+import { useFollowStore } from '@/stores/followStore'
 import { categoryOf } from '@/config/categories'
 import { formatWhen, isLive } from '@/utils/datetime'
+import { distanceKm, formatDistance } from '@/utils/geo'
 
-const emit = defineEmits(['close', 'select'])
+const emit = defineEmits(['close', 'select', 'need-location'])
 
 const eventStore = useEventStore()
+const authStore = useAuthStore()
+const followStore = useFollowStore()
 
-const upcoming = computed(() =>
-  [...eventStore.visibleEvents].sort(
-    (a, b) => new Date(a.startsAt) - new Date(b.startsAt)
-  )
-)
+const sortNearest = ref(false)
+
+const WINDOWS = [
+  { key: 'all', label: 'All' },
+  { key: 'now', label: 'Now' },
+  { key: 'today', label: 'Today' },
+  { key: 'week', label: 'Week' }
+]
+
+function toggleNearest() {
+  sortNearest.value = !sortNearest.value
+  if (sortNearest.value && !eventStore.userLocation) emit('need-location')
+}
+
+function distanceTo(event) {
+  const here = eventStore.userLocation
+  if (!here) return null
+  return distanceKm(here, event)
+}
+
+const upcoming = computed(() => {
+  const events = [...eventStore.visibleEvents]
+  if (sortNearest.value && eventStore.userLocation) {
+    return events.sort((a, b) => distanceTo(a) - distanceTo(b))
+  }
+  return events.sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt))
+})
 </script>
 
 <template>
@@ -28,12 +57,7 @@ const upcoming = computed(() =>
 
     <div class="event-list__windows">
       <button
-        v-for="win in [
-          { key: 'all', label: 'All' },
-          { key: 'now', label: 'Now' },
-          { key: 'today', label: 'Today' },
-          { key: 'week', label: 'Week' }
-        ]"
+        v-for="win in WINDOWS"
         :key="win.key"
         class="event-list__window"
         :class="{ 'event-list__window--active': eventStore.timeWindow === win.key }"
@@ -43,8 +67,26 @@ const upcoming = computed(() =>
       </button>
     </div>
 
+    <div class="event-list__windows">
+      <button
+        v-if="authStore.isAuthenticated"
+        class="event-list__window"
+        :class="{ 'event-list__window--gold': eventStore.onlyMine }"
+        @click="eventStore.setOnlyMine(!eventStore.onlyMine)"
+      >
+        ⭐ Mine
+      </button>
+      <button
+        class="event-list__window"
+        :class="{ 'event-list__window--gold': sortNearest }"
+        @click="toggleNearest"
+      >
+        📏 Nearest
+      </button>
+    </div>
+
     <p v-if="!upcoming.length" class="event-list__empty">
-      Nothing on the map right now — be the first to drop an event!
+      Nothing here right now — try another filter, or be the first to create an event!
     </p>
 
     <button
@@ -56,11 +98,13 @@ const upcoming = computed(() =>
       <span class="event-list__dot" :style="{ background: categoryOf(event.category).color }" />
       <span class="event-list__body">
         <span class="event-list__row-title">
-          {{ event.title }}
+          <template v-if="followStore.isFriendEvent(event)">⭐ </template>{{ event.title }}
           <span v-if="isLive(event)" class="event-list__live">LIVE</span>
         </span>
         <span class="event-list__meta">
-          {{ event.locationName }} · {{ formatWhen(event.startsAt) }}
+          {{ event.locationName }} · {{ formatWhen(event.startsAt)
+          }}<template v-if="distanceTo(event) !== null">
+            · {{ formatDistance(distanceTo(event)) }}</template>
         </span>
       </span>
       <span class="event-list__count">
@@ -73,7 +117,7 @@ const upcoming = computed(() =>
 <style scoped>
 .event-list {
   width: min(360px, calc(100vw - 24px));
-  max-height: min(60vh, 480px);
+  max-height: min(64vh, 520px);
   overflow-y: auto;
   padding: 16px;
 }
@@ -102,7 +146,7 @@ const upcoming = computed(() =>
 .event-list__windows {
   display: flex;
   gap: 6px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .event-list__window {
@@ -115,12 +159,19 @@ const upcoming = computed(() =>
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-subtle);
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .event-list__window--active {
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);
   color: #fff;
   border-color: transparent;
+}
+
+.event-list__window--gold {
+  background: rgba(212, 175, 106, 0.22);
+  color: var(--gold);
+  border-color: rgba(212, 175, 106, 0.5);
 }
 
 .event-list__empty {

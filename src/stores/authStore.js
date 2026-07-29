@@ -256,6 +256,8 @@ export const useAuthStore = defineStore('auth', {
       if (isLive) await supabase.auth.signOut()
       this.currentUser = null
       storage.remove(SESSION_KEY)
+      const { useFollowStore } = await import('./followStore')
+      useFollowStore().reset()
     }
   }
 })
