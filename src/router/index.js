@@ -31,9 +31,9 @@ const router = createRouter({
 })
 
 // Members-only gate: every route flagged requiresAuth bounces to /login
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
-  auth.restoreSession()
+  await auth.restoreSession()
 
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }

@@ -15,12 +15,13 @@ const props = defineProps({
   event: { type: Object, required: true }
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'edit'])
 
 const eventStore = useEventStore()
 const authStore = useAuthStore()
 const busy = ref(false)
 const error = ref('')
+const confirmingCancel = ref(false)
 
 const category = computed(() => categoryOf(props.event.category))
 const live = computed(() => isLive(props.event))
@@ -67,6 +68,24 @@ async function toggleRsvp() {
     }
   } catch (e) {
     error.value = e.message
+  } finally {
+    busy.value = false
+  }
+}
+
+async function cancelEvent() {
+  if (!confirmingCancel.value) {
+    confirmingCancel.value = true
+    return
+  }
+  busy.value = true
+  error.value = ''
+  try {
+    await eventStore.cancel(props.event.id)
+    emit('close')
+  } catch (e) {
+    error.value = e.message
+    confirmingCancel.value = false
   } finally {
     busy.value = false
   }
@@ -136,7 +155,22 @@ async function toggleRsvp() {
         <template v-else-if="full">Event full</template>
         <template v-else>Join · RSVP</template>
       </button>
-      <div v-else class="event-card__hosting">You're hosting this event 🎉</div>
+      <template v-else>
+        <div class="event-card__hosting">You're hosting this event 🎉</div>
+        <div class="event-card__host-actions">
+          <button class="btn-ghost" :disabled="busy" @click="emit('edit', event)">
+            ✏️ Edit details
+          </button>
+          <button
+            class="btn-ghost event-card__cancel"
+            :class="{ 'event-card__cancel--confirm': confirmingCancel }"
+            :disabled="busy"
+            @click="cancelEvent"
+          >
+            {{ confirmingCancel ? 'Tap again to confirm' : 'Cancel event' }}
+          </button>
+        </div>
+      </template>
     </footer>
   </article>
 </template>
@@ -300,5 +334,24 @@ async function toggleRsvp() {
   color: var(--gold);
   font-size: 14px;
   font-weight: 600;
+}
+
+.event-card__host-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.event-card__host-actions > * {
+  flex: 1;
+}
+
+.event-card__cancel {
+  color: var(--danger);
+}
+
+.event-card__cancel--confirm {
+  background: rgba(244, 88, 122, 0.16);
+  border-color: rgba(244, 88, 122, 0.4);
 }
 </style>

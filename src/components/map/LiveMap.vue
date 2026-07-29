@@ -13,6 +13,8 @@
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import 'leaflet.markercluster'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
 import { MAP_OPTIONS, TILE_URL, TILE_OPTIONS, QATAR_CENTER } from '@/config/map'
 import { buildEventIcon, buildDraftIcon } from './eventMarker'
 import { addVectorBasemap } from './vectorBasemap'
@@ -29,8 +31,10 @@ const emit = defineEmits(['select', 'pick'])
 const mapEl = ref(null)
 
 let map = null
+let clusterGroup = null
 let markersById = new Map()
 let draftMarker = null
+let locationMarker = null
 let refreshTimer = null
 
 onMounted(() => {
@@ -49,7 +53,24 @@ onMounted(() => {
 
   L.control.zoom({ position: 'bottomright' }).addTo(map)
 
+  // Nearby pins collapse into a count bubble; tapping zooms in, and pins
+  // at the same spot fan out — no more unreachable overlapping markers
+  clusterGroup = L.markerClusterGroup({
+    maxClusterRadius: 44,
+    disableClusteringAtZoom: 14,
+    showCoverageOnHover: false,
+    spiderfyDistanceMultiplier: 1.6,
+    iconCreateFunction: (cluster) =>
+      L.divIcon({
+        className: 'event-cluster',
+        html: `<span class="event-cluster__badge">${cluster.getChildCount()}</span>`,
+        iconSize: [44, 44],
+        iconAnchor: [22, 22]
+      })
+  }).addTo(map)
+
   map.on('click', onMapClick)
+  map.on('locationfound', onLocationFound)
 
   renderMarkers(props.events)
 
@@ -63,6 +84,8 @@ onBeforeUnmount(() => {
     map.remove()
     map = null
   }
+  clusterGroup = null
+  locationMarker = null
   markersById = new Map()
 })
 
@@ -100,8 +123,8 @@ function renderMarkers(events) {
           className: 'event-tooltip'
         })
         .on('click', () => emit('select', event.id))
-        .addTo(map)
       marker._pinSignature = null
+      clusterGroup.addLayer(marker)
       markersById.set(event.id, marker)
     }
   }
@@ -109,7 +132,7 @@ function renderMarkers(events) {
   // Drop markers for events that ended or were filtered out
   for (const [id, marker] of markersById) {
     if (!seen.has(id)) {
-      marker.remove()
+      clusterGroup.removeLayer(marker)
       markersById.delete(id)
     }
   }
@@ -157,6 +180,24 @@ function flyToEvent(event) {
 
 function locateMe() {
   map.locate({ setView: true, maxZoom: 15 })
+}
+
+function onLocationFound(e) {
+  if (!locationMarker) {
+    locationMarker = L.marker(e.latlng, {
+      interactive: false,
+      keyboard: false,
+      zIndexOffset: 1500,
+      icon: L.divIcon({
+        className: 'my-location',
+        html: '<span class="my-location__pulse"></span><span class="my-location__dot"></span>',
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      })
+    }).addTo(map)
+  } else {
+    locationMarker.setLatLng(e.latlng)
+  }
 }
 
 function resetView() {
@@ -249,5 +290,42 @@ defineExpose({ locateMe, resetView, clearDraftPin })
   letter-spacing: 0.06em;
   text-transform: none;
   color: rgba(176, 188, 208, 0.78);
+}
+
+.live-map :deep(.event-cluster__badge) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);
+  border: 2.5px solid rgba(255, 255, 255, 0.85);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+.live-map :deep(.my-location) {
+  pointer-events: none;
+}
+
+.live-map :deep(.my-location__dot) {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: #38bdf8;
+  border: 2.5px solid #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+
+.live-map :deep(.my-location__pulse) {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.35);
+  animation: pin-pulse 2.2s ease-out infinite;
 }
 </style>

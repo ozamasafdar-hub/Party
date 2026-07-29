@@ -3,6 +3,8 @@ import {
   listEvents,
   listMembers,
   createEvent,
+  updateEvent,
+  cancelEvent,
   joinEvent,
   leaveEvent,
   subscribeToEvents
@@ -72,15 +74,19 @@ export const useEventStore = defineStore('events', {
       this.startRealtime()
     },
 
-    /** Live sync: INSERT/UPDATE changes stream in and patch local state. */
+    /** Live sync: changes stream in and patch (or replace) local state. */
     startRealtime() {
       if (this.unsubscribe) return
       this.unsubscribe = subscribeToEvents((change) => {
         if (change.type === 'INSERT') {
-          this.events.push(change.event)
+          if (!this.events.some((e) => e.id === change.event.id)) {
+            this.events.push(change.event)
+          }
         } else if (change.type === 'UPDATE') {
           const i = this.events.findIndex((e) => e.id === change.event.id)
           if (i !== -1) this.events.splice(i, 1, change.event)
+        } else if (change.type === 'SYNC') {
+          this.events = change.events
         }
       })
     },
@@ -112,6 +118,19 @@ export const useEventStore = defineStore('events', {
       }
       this.selectedEventId = event.id
       return event
+    },
+
+    async update(eventId, data) {
+      const event = await updateEvent(eventId, data)
+      const i = this.events.findIndex((e) => e.id === event.id)
+      if (i !== -1) this.events.splice(i, 1, event)
+      return event
+    },
+
+    async cancel(eventId) {
+      await cancelEvent(eventId)
+      this.events = this.events.filter((e) => e.id !== eventId)
+      if (this.selectedEventId === eventId) this.selectedEventId = null
     },
 
     /** RSVP — service rejects when full, which auto-closes the guestlist. */

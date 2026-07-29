@@ -45,8 +45,11 @@ create table public.events (
   description      text check (char_length(description) <= 400),
   category         public.event_category not null default 'other',
   location_name    text not null,
-  -- geography(Point) = lat/lng on a sphere; distance queries return meters
-  location         geography (point, 4326) not null,
+  lat              double precision not null check (lat between -90 and 90),
+  lng              double precision not null check (lng between -180 and 180),
+  -- geography(Point) derived from lat/lng; distance queries return meters
+  location         geography (point, 4326) generated always as
+                     (st_setsrid(st_makepoint(lng, lat), 4326)::geography) stored,
   starts_at        timestamptz not null,
   duration_minutes integer not null check (duration_minutes between 15 and 1440),
   max_capacity     integer not null check (max_capacity between 2 and 500),
@@ -141,6 +144,10 @@ create policy "approved members read profiles" on public.profiles
     exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_approved)
   );
 
+-- A signed-in user can always read their own row (to check approval status)
+create policy "read own profile" on public.profiles
+  for select using (id = auth.uid());
+
 create policy "members update own profile" on public.profiles
   for update using (id = auth.uid());
 
@@ -165,6 +172,56 @@ create policy "approved members read rsvps" on public.rsvps
 
 create policy "members manage own rsvps" on public.rsvps
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- ----------------------------------------------------------------------------
+-- Invite redemption — called by the app after a new member's first sign-in.
+-- Validates the code, creates/approves the profile, and consumes the invite,
+-- all in one transaction. SECURITY DEFINER so it can write past RLS.
+-- ----------------------------------------------------------------------------
+create or replace function public.redeem_invite(invite_code text, member_name text)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  v_code text := upper(trim(invite_code));
+  v_name text := coalesce(nullif(trim(member_name), ''), 'Member');
+begin
+  if auth.uid() is null then
+    raise exception 'NOT_AUTHENTICATED';
+  end if;
+
+  -- Already an approved member? Just refresh the name.
+  if exists (select 1 from public.profiles where id = auth.uid() and is_approved) then
+    update public.profiles set full_name = v_name where id = auth.uid();
+    return;
+  end if;
+
+  perform 1 from public.invites
+   where code = v_code
+     and used_by is null
+     and (expires_at is null or expires_at > now())
+   for update;
+  if not found then
+    raise exception 'INVALID_INVITE';
+  end if;
+
+  insert into public.profiles (id, full_name, is_approved)
+  values (auth.uid(), v_name, true)
+  on conflict (id) do update set is_approved = true, full_name = excluded.full_name;
+
+  update public.invites
+     set used_by = auth.uid(), used_at = now()
+   where code = v_code;
+end;
+$$;
+
+-- ----------------------------------------------------------------------------
+-- Seed invite codes (add more any time; each code admits one member)
+-- ----------------------------------------------------------------------------
+insert into public.invites (code) values
+  ('PEARL2026'), ('MAJLIS-VIP'), ('DOHA-CREW')
+on conflict (code) do nothing;
 
 -- ----------------------------------------------------------------------------
 -- Realtime — stream INSERT/UPDATE/DELETE on events + rsvps to every client

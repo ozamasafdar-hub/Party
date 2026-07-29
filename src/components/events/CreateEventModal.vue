@@ -1,18 +1,19 @@
 <script setup>
 /**
- * CreateEventModal — the quick-post flow.
- * The member has already dropped a pin on the map (pick mode); this form
+ * CreateEventModal — the quick-post flow, and edit mode for hosts.
+ * Creating: the member dropped a pin on the map (pick mode) and this form
  * captures Title, Description, Category, Date/Time, Duration and Max
- * Capacity, then publishes the event to the map.
+ * Capacity. Editing: same form prefilled from the existing event.
  */
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { CATEGORIES } from '@/config/categories'
 import { nextHalfHourISO, toLocalInputValue } from '@/utils/datetime'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
 
 const props = defineProps({
-  coords: { type: Object, required: true } // { lat, lng }
+  coords: { type: Object, default: null }, // { lat, lng } — create mode
+  event: { type: Object, default: null } // existing event — edit mode
 })
 
 const emit = defineEmits(['close', 'created'])
@@ -20,14 +21,19 @@ const emit = defineEmits(['close', 'created'])
 const eventStore = useEventStore()
 const authStore = useAuthStore()
 
+const isEditing = computed(() => !!props.event)
+const pin = computed(() =>
+  props.event ? { lat: props.event.lat, lng: props.event.lng } : props.coords
+)
+
 const form = reactive({
-  title: '',
-  description: '',
-  category: 'dining',
-  locationName: '',
-  startsAtLocal: toLocalInputValue(nextHalfHourISO()),
-  durationMinutes: 120,
-  maxCapacity: 6
+  title: props.event?.title ?? '',
+  description: props.event?.description ?? '',
+  category: props.event?.category ?? 'dining',
+  locationName: props.event?.locationName ?? '',
+  startsAtLocal: toLocalInputValue(props.event?.startsAt ?? nextHalfHourISO()),
+  durationMinutes: props.event?.durationMinutes ?? 120,
+  maxCapacity: props.event?.maxCapacity ?? 6
 })
 
 const busy = ref(false)
@@ -49,22 +55,23 @@ async function submit() {
   const startsAt = new Date(form.startsAtLocal)
   if (Number.isNaN(startsAt.getTime())) return (error.value = 'Pick a valid date and time.')
 
+  const payload = {
+    title: form.title,
+    description: form.description,
+    category: form.category,
+    locationName: form.locationName,
+    lat: pin.value.lat,
+    lng: pin.value.lng,
+    startsAt: startsAt.toISOString(),
+    durationMinutes: Number(form.durationMinutes),
+    maxCapacity: Math.max(2, Number(form.maxCapacity))
+  }
+
   busy.value = true
   try {
-    const event = await eventStore.create(
-      {
-        title: form.title,
-        description: form.description,
-        category: form.category,
-        locationName: form.locationName,
-        lat: props.coords.lat,
-        lng: props.coords.lng,
-        startsAt: startsAt.toISOString(),
-        durationMinutes: Number(form.durationMinutes),
-        maxCapacity: Math.max(2, Number(form.maxCapacity))
-      },
-      authStore.currentUser
-    )
+    const event = isEditing.value
+      ? await eventStore.update(props.event.id, payload)
+      : await eventStore.create(payload, authStore.currentUser)
     emit('created', event)
   } catch (e) {
     error.value = e.message
@@ -77,9 +84,9 @@ async function submit() {
 <template>
   <div class="modal-backdrop" @click.self="emit('close')">
     <form class="create-modal glass-panel" @submit.prevent="submit">
-      <h2 class="create-modal__title">Drop an event pin</h2>
+      <h2 class="create-modal__title">{{ isEditing ? 'Edit event' : 'Drop an event pin' }}</h2>
       <p class="create-modal__coords">
-        📍 Pinned at {{ coords.lat.toFixed(4) }}, {{ coords.lng.toFixed(4) }}
+        📍 Pinned at {{ pin.lat.toFixed(4) }}, {{ pin.lng.toFixed(4) }}
       </p>
 
       <label class="field-label" for="ev-title">Event title</label>
@@ -149,7 +156,7 @@ async function submit() {
       <div class="create-modal__actions">
         <button type="button" class="btn-ghost" @click="emit('close')">Cancel</button>
         <button type="submit" class="btn-primary" :disabled="busy">
-          {{ busy ? 'Publishing…' : 'Publish to map' }}
+          {{ busy ? 'Saving…' : isEditing ? 'Save changes' : 'Publish to map' }}
         </button>
       </div>
     </form>

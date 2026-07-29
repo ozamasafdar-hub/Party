@@ -168,13 +168,27 @@ domain), and zone/neighbourhood/locality boundaries from
 [Who's On First](https://whosonfirst.org) (CC0/CC BY). Raster tiles are
 © OpenStreetMap contributors, style © CARTO.
 
-## 🔌 Going to production (Supabase)
+## 🔌 Going live with Supabase
 
-1. Create a Supabase project and run `docs/database-schema.sql`.
-2. `npm install @supabase/supabase-js`, add `VITE_SUPABASE_URL` and
-   `VITE_SUPABASE_ANON_KEY` to `.env`.
-3. Replace the function bodies in `src/services/eventService.js` with
-   Supabase queries (the call shapes already match) and swap
-   `authStore.login` for `supabase.auth.signInWithOtp`.
-4. Optional: swap `src/config/map.js` to Mapbox GL vector tiles for 3D
-   buildings and custom branding.
+The Supabase integration is already built in — the app auto-detects it.
+With no configuration it runs in demo mode (local seeded data); with the
+two env vars set it becomes a real multi-user app: email + one-time-code
+sign-in, invite redemption, shared events, and realtime RSVP sync.
+
+1. Create a free project at [supabase.com](https://supabase.com).
+2. In the project's **SQL Editor**, paste and run
+   [`docs/database-schema.sql`](docs/database-schema.sql) (creates tables,
+   security policies, capacity trigger, invite codes, realtime).
+3. In **Authentication → Sign In / Up → Email**, make sure the Email
+   provider is enabled (it is by default).
+4. Grab **Settings → API → Project URL** and the **anon public** key, then:
+   - **Local dev:** copy `.env.example` to `.env` and fill both values.
+   - **Deployed site:** in the GitHub repo, add them as
+     **Settings → Secrets and variables → Actions → New repository secret**,
+     named `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, then re-run the
+     "Deploy to GitHub Pages" workflow.
+5. Manage invites in the `invites` table — each code admits one member
+   (three starter codes are seeded, including `PEARL2026`).
+
+Optional next step: swap `src/config/map.js` to Mapbox GL vector tiles for
+3D buildings and custom branding.
