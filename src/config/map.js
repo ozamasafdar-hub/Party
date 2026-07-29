@@ -38,30 +38,54 @@ const carto = (style) => ({
   }
 })
 
+const esri = (service, maxNativeZoom = 19) => ({
+  url: `https://server.arcgisonline.com/ArcGIS/rest/services/${service}/MapServer/tile/{z}/{y}/{x}`,
+  options: { attribution: ESRI_ATTRIBUTION, maxNativeZoom, maxZoom: 20 }
+})
+
+/**
+ * Each style lists `sources` — ordered fallback chains. If a chain's base
+ * layer can't load anything (blocked CDN, offline), the map tries the
+ * next chain, and only after every chain fails does it drop to the
+ * bundled vector chart. A chain is an array of stacked tile layers
+ * (base first, optional label overlays after).
+ */
 export const BASEMAPS = {
   night: {
     label: 'Night',
     emoji: '🌙',
     description: 'Dark streets — the WYN look',
-    tiles: [carto('dark_all')]
+    sources: [
+      [carto('dark_all')],
+      // Esri's dark canvas (native tiles stop at z16; upscaled beyond)
+      [esri('Canvas/World_Dark_Gray_Base', 16), esri('Canvas/World_Dark_Gray_Reference', 16)]
+    ]
   },
   day: {
     label: 'Day',
     emoji: '☀️',
     description: 'Bright streets and places',
-    tiles: [carto('rastertiles/voyager')]
+    sources: [
+      [carto('rastertiles/voyager')],
+      [
+        {
+          url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          options: {
+            attribution:
+              '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxNativeZoom: 19,
+            maxZoom: 20
+          }
+        }
+      ]
+    ]
   },
   satellite: {
     label: 'Satellite',
     emoji: '🛰️',
     description: 'Aerial imagery with labels',
-    tiles: [
-      {
-        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        options: { attribution: ESRI_ATTRIBUTION, maxZoom: 19 }
-      },
-      // Labels drawn over the imagery so place names stay readable
-      carto('dark_only_labels')
+    sources: [
+      [esri('World_Imagery'), esri('Reference/World_Boundaries_and_Places')]
     ]
   },
   chart: {
@@ -69,7 +93,7 @@ export const BASEMAPS = {
     emoji: '🧭',
     description: 'Offline vector map of Qatar',
     vector: true,
-    tiles: []
+    sources: []
   }
 }
 

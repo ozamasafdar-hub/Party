@@ -66,12 +66,24 @@ function setHeat(on) {
 const fallbackNotice = ref(false)
 let noticeTimer = null
 
+const SITE_URL = 'https://ozamasafdar-hub.github.io/Party/'
+
+// Embedded previews (e.g. the claude.ai demo frame) can never reach tile
+// servers — point people at the full site instead of a dead-end message
+const isEmbeddedPreview = (() => {
+  try {
+    return window.self !== window.top
+  } catch {
+    return true
+  }
+})()
+
 function onTileFallback() {
   // Raster tiles unreachable — the map switched itself to the chart
   mapStyle.value = 'chart'
   fallbackNotice.value = true
   clearTimeout(noticeTimer)
-  noticeTimer = setTimeout(() => (fallbackNotice.value = false), 5000)
+  noticeTimer = setTimeout(() => (fallbackNotice.value = false), isEmbeddedPreview ? 12000 : 5000)
 }
 
 // Sign-in modal — opened at the moment a visitor tries a members-only
@@ -215,7 +227,14 @@ function toggleList() {
     <!-- Tile-fallback notice -->
     <Transition name="fade">
       <div v-if="fallbackNotice" class="map-view__notice glass-panel">
-        Couldn't reach the map tile server — showing the offline chart instead.
+        <template v-if="isEmbeddedPreview">
+          This preview can't load street tiles — open the
+          <a class="map-view__notice-link" :href="SITE_URL" target="_blank" rel="noopener">full app</a>
+          for Satellite, Day &amp; Night.
+        </template>
+        <template v-else>
+          Couldn't reach the map tile server — showing the offline chart instead.
+        </template>
       </div>
     </Transition>
 
@@ -381,6 +400,12 @@ function toggleList() {
   max-width: calc(100vw - 24px);
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.map-view__notice-link {
+  color: var(--gold);
+  font-weight: 700;
+  text-decoration: underline;
 }
 
 @media (max-width: 520px) {

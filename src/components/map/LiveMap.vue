@@ -79,7 +79,7 @@ onMounted(() => {
 
 /* --- basemap styles ------------------------------------------------------ */
 
-function applyBasemap(key) {
+function applyBasemap(key, sourceIndex = 0) {
   if (!map) return
   baseLayers.forEach((layer) => layer.remove())
   baseLayers = []
@@ -89,19 +89,20 @@ function applyBasemap(key) {
   }
 
   const style = BASEMAPS[key] || BASEMAPS[DEFAULT_BASEMAP]
-  if (style.vector) {
+  if (style.vector || sourceIndex >= style.sources.length) {
     vectorCleanup = addVectorBasemap(map)
+    if (!style.vector) emit('fallback', key)
     return
   }
 
-  // If the tile CDN is unreachable (offline, sandboxed hosting), swap to
-  // the bundled vector chart and tell the parent so the picker updates.
-  // Only fall back when NOTHING loads: a single dropped tile on a flaky
-  // connection must not permanently downgrade the chosen style.
+  // A chain whose base layer loads NOTHING (blocked CDN, offline) hands
+  // over to the style's next provider chain, and only when every chain
+  // fails does the map drop to the bundled vector chart. A single dropped
+  // tile on a flaky connection never downgrades the chosen style.
   let loaded = 0
   let errored = 0
-  let fellBack = false
-  style.tiles.forEach(({ url, options }, i) => {
+  let advanced = false
+  style.sources[sourceIndex].forEach(({ url, options }, i) => {
     const layer = L.tileLayer(url, options).addTo(map)
     if (i === 0) {
       layer.on('tileload', () => {
@@ -109,10 +110,9 @@ function applyBasemap(key) {
       })
       layer.on('tileerror', () => {
         errored += 1
-        if (fellBack || loaded > 0 || errored < 3) return
-        fellBack = true
-        applyBasemap('chart')
-        emit('fallback', key)
+        if (advanced || loaded > 0 || errored < 3) return
+        advanced = true
+        applyBasemap(key, sourceIndex + 1)
       })
     }
     baseLayers.push(layer)
