@@ -241,6 +241,12 @@ function clearDraftPin() {
   }
 }
 
+/** Programmatic pin placement (search result) — flies the camera there. */
+function setDraftPin(lat, lng) {
+  placeDraftPin(L.latLng(lat, lng))
+  map.flyTo([lat, lng], Math.max(map.getZoom(), 15), { duration: 0.8 })
+}
+
 function flyToEvent(event) {
   map.flyTo([event.lat, event.lng], Math.max(map.getZoom(), 14), { duration: 0.8 })
 }
@@ -305,7 +311,7 @@ watch(
   }
 )
 
-defineExpose({ locateMe, resetView, clearDraftPin })
+defineExpose({ locateMe, resetView, clearDraftPin, setDraftPin })
 </script>
 
 <template>

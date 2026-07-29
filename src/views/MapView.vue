@@ -16,6 +16,7 @@ import CreateEventModal from '@/components/events/CreateEventModal.vue'
 import EventListPanel from '@/components/events/EventListPanel.vue'
 import LoginPanel from '@/components/auth/LoginPanel.vue'
 import MapStyleControl from '@/components/map/MapStyleControl.vue'
+import MapSearchBar from '@/components/map/MapSearchBar.vue'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useNotifStore } from '@/stores/notifStore'
@@ -48,6 +49,7 @@ const liveMap = ref(null)
 const pickMode = ref(false)
 const pickingLocation = ref(false) // form hidden while the member taps the spot
 const pickedCoords = ref(null)
+const pickedPlaceName = ref('') // from search — suggested into the form
 const showCreateModal = ref(false)
 const editingEvent = ref(null)
 const showList = ref(false)
@@ -188,10 +190,19 @@ function onPick(coords) {
   stopPickingLocation() // back to the form, pin stays visible on the map
 }
 
+/** Search result chosen: fly there, set the pin, return to the form. */
+function onSearchSelect(result) {
+  liveMap.value?.setDraftPin(result.lat, result.lng)
+  pickedCoords.value = { lat: result.lat, lng: result.lng }
+  pickedPlaceName.value = result.name
+  stopPickingLocation()
+}
+
 function onModalClose() {
   showCreateModal.value = false
   editingEvent.value = null
   pickedCoords.value = null
+  pickedPlaceName.value = ''
   stopPickingLocation()
   liveMap.value?.clearDraftPin()
 }
@@ -283,11 +294,18 @@ function toggleList() {
       </div>
     </Transition>
 
+    <!-- Location search while picking -->
+    <Transition name="fade">
+      <div v-if="pickingLocation" class="map-view__search">
+        <MapSearchBar @select="onSearchSelect" />
+      </div>
+    </Transition>
+
     <!-- Quick-post -->
     <div class="map-view__fab-area">
       <Transition name="fade">
         <div v-if="pickingLocation" class="map-view__hint glass-panel">
-          Tap the map where your event happens
+          Search above or tap the map to set the spot
           <button class="map-view__hint-cancel" @click="stopPickingLocation">Back to form</button>
         </div>
       </Transition>
@@ -332,6 +350,7 @@ function toggleList() {
         v-show="!pickingLocation"
         :coords="pickedCoords"
         :event="editingEvent"
+        :place-name="pickedPlaceName"
         @close="onModalClose"
         @created="onSaved"
         @pick-location="startPickingLocation"
@@ -440,6 +459,20 @@ function toggleList() {
   color: var(--gold);
   font-weight: 700;
   text-decoration: underline;
+}
+
+.map-view__search {
+  position: absolute;
+  z-index: 48;
+  top: max(84px, calc(env(safe-area-inset-top) + 70px));
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+@media (max-width: 720px) {
+  .map-view__search {
+    top: max(140px, calc(env(safe-area-inset-top) + 126px));
+  }
 }
 
 .map-view__notice--toast {

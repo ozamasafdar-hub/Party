@@ -6,7 +6,7 @@
  * state, and returns once the member taps the spot). Editing: same form
  * prefilled from the existing event, location re-pickable.
  */
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { CATEGORIES } from '@/config/categories'
 import { nextHalfHourISO, toLocalInputValue } from '@/utils/datetime'
 import { resizeCoverFile } from '@/utils/image'
@@ -15,7 +15,8 @@ import { useAuthStore } from '@/stores/authStore'
 
 const props = defineProps({
   coords: { type: Object, default: null }, // { lat, lng } — freshly picked
-  event: { type: Object, default: null } // existing event — edit mode
+  event: { type: Object, default: null }, // existing event — edit mode
+  placeName: { type: String, default: '' } // from the map search
 })
 
 const emit = defineEmits(['close', 'created', 'pick-location'])
@@ -43,6 +44,17 @@ const form = reactive({
 
 const busy = ref(false)
 const error = ref('')
+
+// A searched place suggests the name — but never overwrites what the
+// member already typed
+watch(
+  () => props.placeName,
+  (name) => {
+    if (name && !form.locationName.trim()) form.locationName = name
+  },
+  { immediate: true }
+)
+
 const coverPreview = ref(props.event?.coverUrl ?? null)
 const newCover = ref(null)
 const coverInput = ref(null)
