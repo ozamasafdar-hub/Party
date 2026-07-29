@@ -6,6 +6,7 @@ import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useNotifStore } from '@/stores/notifStore'
 import { formatTime } from '@/utils/datetime'
+import { isDemoForced } from '@/services/supabaseClient'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
 
 const eventStore = useEventStore()
@@ -32,7 +33,9 @@ function openNotif(notif) {
     <div class="top-bar__brand glass-panel">
       <span class="top-bar__logo">🗺️</span>
       <div>
-        <div class="top-bar__name">WYN</div>
+        <div class="top-bar__name">
+          WYN <span v-if="isDemoForced" class="top-bar__demo-badge">DEMO</span>
+        </div>
         <div class="top-bar__tagline">{{ eventStore.visibleEvents.length }} events live in Qatar</div>
       </div>
     </div>
@@ -132,6 +135,17 @@ function openNotif(notif) {
 .top-bar__tagline {
   font-size: 11.5px;
   color: var(--text-secondary);
+}
+
+.top-bar__demo-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(212, 175, 106, 0.25);
+  color: var(--gold);
+  vertical-align: middle;
 }
 
 .top-bar__filters {
