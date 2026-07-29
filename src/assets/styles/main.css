@@ -1,0 +1,257 @@
+/* ---------------------------------------------------------------------------
+   Majlis Map — global styles (premium dark theme)
+--------------------------------------------------------------------------- */
+
+:root {
+  --bg-900: #0b0f19;
+  --bg-800: #111827;
+  --bg-700: #1a2233;
+  --bg-glass: rgba(17, 24, 39, 0.82);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --text-primary: #f4f6fb;
+  --text-secondary: #9aa5b8;
+  --accent: #8b1538; /* Qatar maroon */
+  --accent-bright: #c62d55;
+  --gold: #d4af6a;
+  --success: #2dd4a0;
+  --danger: #f4587a;
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+  --shadow-card: 0 18px 48px rgba(0, 0, 0, 0.45);
+  --font-ui: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-ui);
+  background: var(--bg-900);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Shared UI primitives ----------------------------------------------------- */
+
+.glass-panel {
+  background: var(--bg-glass);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);
+  box-shadow: 0 8px 24px rgba(198, 45, 85, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(198, 45, 85, 0.45);
+}
+
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 20px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--border-subtle);
+  transition: background 0.15s ease;
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.field-input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.field-input:focus {
+  border-color: var(--accent-bright);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.field-input::placeholder {
+  color: rgba(154, 165, 184, 0.6);
+}
+
+/* Leaflet overrides — crisp dark map chrome -------------------------------- */
+
+/* html prefix outranks leaflet.css's own rule regardless of import order */
+html .leaflet-container {
+  background: #0a0e17;
+  font-family: var(--font-ui);
+}
+
+.leaflet-control-zoom {
+  border: none !important;
+  box-shadow: var(--shadow-card) !important;
+  border-radius: var(--radius-sm) !important;
+  overflow: hidden;
+}
+
+.leaflet-control-zoom a {
+  background: var(--bg-glass) !important;
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  width: 40px !important;
+  height: 40px !important;
+  line-height: 40px !important;
+  font-size: 18px !important;
+  backdrop-filter: blur(18px);
+}
+
+.leaflet-control-zoom a:hover {
+  background: var(--bg-700) !important;
+}
+
+.leaflet-control-attribution {
+  background: rgba(11, 15, 25, 0.7) !important;
+  color: var(--text-secondary) !important;
+  font-size: 10px !important;
+}
+
+.leaflet-control-attribution a {
+  color: var(--text-secondary) !important;
+}
+
+/* Event pin markers — vector SVG so they stay crisp on any DPI ------------- */
+
+.event-pin {
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.55));
+  transition: transform 0.15s ease;
+  transform-origin: bottom center;
+}
+
+.event-pin:hover {
+  transform: scale(1.12);
+  z-index: 1000 !important;
+}
+
+.event-pin--live .event-pin__pulse {
+  animation: pin-pulse 2s ease-out infinite;
+}
+
+@keyframes pin-pulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+/* Scrollbars --------------------------------------------------------------- */
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+
+/* Transitions -------------------------------------------------------------- */
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.28s ease;
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(24px);
+  opacity: 0;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
