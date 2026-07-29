@@ -17,20 +17,35 @@ create table public.profiles (
   full_name   text not null,
   avatar_url  text,
   bio         text,
-  is_approved boolean not null default false,  -- admin approval gate
+  -- Open sign-up: approved by default. Flip to false (or change the
+  -- default) to gate access behind admin approval later.
+  is_approved boolean not null default true,
   is_admin    boolean not null default false,
   created_at  timestamptz not null default now()
 );
 
--- Invite-only sign-up: a code must exist and be unused
-create table public.invites (
-  code        text primary key,
-  created_by  uuid references public.profiles (id),
-  used_by     uuid references public.profiles (id),
-  used_at     timestamptz,
-  expires_at  timestamptz,
-  created_at  timestamptz not null default now()
-);
+-- Auto-create a profile the moment an account signs up (name arrives via
+-- the sign-up call's user metadata)
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+as $$
+begin
+  insert into public.profiles (id, full_name)
+  values (
+    new.id,
+    coalesce(nullif(trim(new.raw_user_meta_data ->> 'full_name'), ''),
+             split_part(new.email, '@', 1))
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
 
 -- ----------------------------------------------------------------------------
 -- EVENTS — geospatial coordinates stored as PostGIS geography
@@ -136,7 +151,6 @@ $$;
 alter table public.profiles enable row level security;
 alter table public.events   enable row level security;
 alter table public.rsvps    enable row level security;
-alter table public.invites  enable row level security;
 
 -- Only approved members can see anything
 create policy "approved members read profiles" on public.profiles
@@ -172,56 +186,6 @@ create policy "approved members read rsvps" on public.rsvps
 
 create policy "members manage own rsvps" on public.rsvps
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
-
--- ----------------------------------------------------------------------------
--- Invite redemption — called by the app after a new member's first sign-in.
--- Validates the code, creates/approves the profile, and consumes the invite,
--- all in one transaction. SECURITY DEFINER so it can write past RLS.
--- ----------------------------------------------------------------------------
-create or replace function public.redeem_invite(invite_code text, member_name text)
-returns void
-language plpgsql
-security definer
-as $$
-declare
-  v_code text := upper(trim(invite_code));
-  v_name text := coalesce(nullif(trim(member_name), ''), 'Member');
-begin
-  if auth.uid() is null then
-    raise exception 'NOT_AUTHENTICATED';
-  end if;
-
-  -- Already an approved member? Just refresh the name.
-  if exists (select 1 from public.profiles where id = auth.uid() and is_approved) then
-    update public.profiles set full_name = v_name where id = auth.uid();
-    return;
-  end if;
-
-  perform 1 from public.invites
-   where code = v_code
-     and used_by is null
-     and (expires_at is null or expires_at > now())
-   for update;
-  if not found then
-    raise exception 'INVALID_INVITE';
-  end if;
-
-  insert into public.profiles (id, full_name, is_approved)
-  values (auth.uid(), v_name, true)
-  on conflict (id) do update set is_approved = true, full_name = excluded.full_name;
-
-  update public.invites
-     set used_by = auth.uid(), used_at = now()
-   where code = v_code;
-end;
-$$;
-
--- ----------------------------------------------------------------------------
--- Seed invite codes (add more any time; each code admits one member)
--- ----------------------------------------------------------------------------
-insert into public.invites (code) values
-  ('PEARL2026'), ('WYN-VIP'), ('DOHA-CREW')
-on conflict (code) do nothing;
 
 -- ----------------------------------------------------------------------------
 -- Realtime — stream INSERT/UPDATE/DELETE on events + rsvps to every client

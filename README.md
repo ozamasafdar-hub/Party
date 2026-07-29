@@ -18,8 +18,8 @@ npm install
 npm run dev
 ```
 
-Open the printed URL, sign in with any name and the demo invite code
-**`PEARL2026`**. The app ships with seeded events across Doha (The Pearl,
+Open the printed URL — the map is public, no account needed to browse.
+The app ships with seeded events across Doha (The Pearl,
 B Square, Education City Golf Club, Souq Waqif, Katara, Lusail…) and a
 simulated realtime feed, so the map is alive with zero backend setup.
 
@@ -31,7 +31,7 @@ simulated realtime feed, so the map is alive with zero backend setup.
 | --- | --- | --- |
 | Frontend | **Vue 3 + Vite + Pinia + Vue Router** (JS) | Your chosen framework; Vite for instant HMR, Pinia as the single source of truth for map/event state |
 | Map rendering | **Leaflet** now → **Mapbox GL JS** at scale | Leaflet is free, tiny, and battle-tested; the app uses CARTO's `@2x` retina tiles (the `{r}` URL modifier) plus pure-SVG vector pins, so everything is crisp on UHD displays with **no API key**. When you need 3D buildings, smooth vector zoom, and custom branded styles, swap the tile layer for Mapbox GL — only `src/config/map.js` changes |
-| Backend + realtime | **Supabase** (Postgres + PostGIS + Realtime + Auth) | One platform covers all four hard problems: relational data, **geospatial queries** (`ST_DWithin` for "events near me"), **live sync** (Postgres changes streamed over websockets to every open map), and **gated auth** (invite codes + admin approval enforced by Row Level Security). Firebase lacks real geo-queries; Socket.io means running your own server |
+| Backend + realtime | **Supabase** (Postgres + PostGIS + Realtime + Auth) | One platform covers all four hard problems: relational data, **geospatial queries** (`ST_DWithin` for "events near me"), **live sync** (Postgres changes streamed over websockets to every open map), and **auth** (email + password accounts with Row Level Security). Firebase lacks real geo-queries; Socket.io means running your own server |
 | Hosting | Vercel / Netlify (frontend) + Supabase cloud | Zero-ops, free tiers to start |
 
 **Why not Firebase or Socket.io?** Firestore has no native geospatial
@@ -67,11 +67,9 @@ is_approved  ← admin gate             location_name
 is_admin                              location  geography(Point,4326) ← PostGIS
 created_at                            starts_at (timestamptz)
                                       duration_minutes
-invites                               max_capacity
-─────────────────                     is_cancelled
-code (PK)                             created_at
-created_by / used_by
-expires_at
+                                      max_capacity
+                                      is_cancelled
+                                      created_at
 ```
 
 Key mechanics:
@@ -111,7 +109,7 @@ Party/
     ├── services/
     │   └── eventService.js        # Data layer (mock now, Supabase later)
     ├── stores/
-    │   ├── authStore.js           # Members-only session (invite codes)
+    │   ├── authStore.js           # Email+password accounts (live & demo)
     │   └── eventStore.js          # Events, filters, RSVP + capacity logic
     ├── router/
     │   └── index.js               # Routes + auth guard
@@ -130,7 +128,7 @@ Party/
     │       └── MemberAvatar.vue
     └── views/
         ├── MapView.vue            # Home: map + sheets + quick-post flow
-        ├── LoginView.vue          # Gated invite-only entry
+        ├── LoginView.vue          # Log in / sign up page
         └── ProfileView.vue        # Avatar + hosted/attended history
 ```
 
@@ -143,9 +141,10 @@ Party/
    inline SVG `divIcon`s (vector = crisp at any DPI), color-coded by
    category, with an attendee-count badge and a pulsing ring while the event
    is live. Markers are diffed in place, so realtime updates never flicker.
-2. **Members-only auth** — router guard + invite-code login
-   (`authStore.js`); production path is Supabase Auth + `invites` table +
-   `is_approved` flag enforced by RLS.
+2. **Accounts at the right moment** — the map is public; tapping
+   Join/RSVP or Drop-an-event opens a log in / sign up modal (email +
+   password). Live mode uses Supabase Auth with an `is_approved` flag
+   enforced by RLS, ready for admin gating later.
 3. **Location-based event creation** — "＋ Drop an event" enters pick mode;
    tap the map to place a draft pin, then fill Title, Description, Category,
    Date/Time, Duration, and Max Capacity.
@@ -171,14 +170,15 @@ domain), and zone/neighbourhood/locality boundaries from
 ## 🔌 Going live with Supabase
 
 The Supabase integration is already built in — the app auto-detects it.
-With no configuration it runs in demo mode (local seeded data); with the
-two env vars set it becomes a real multi-user app: email + one-time-code
-sign-in, invite redemption, shared events, and realtime RSVP sync.
+With no configuration it runs in demo mode (local seeded data and
+browser-local accounts); with the two env vars set it becomes a real
+multi-user app: email + password accounts, shared events, and realtime
+RSVP sync.
 
 1. Create a free project at [supabase.com](https://supabase.com).
 2. In the project's **SQL Editor**, paste and run
    [`docs/database-schema.sql`](docs/database-schema.sql) (creates tables,
-   security policies, capacity trigger, invite codes, realtime).
+   security policies, capacity trigger, profile auto-creation, realtime).
 3. In **Authentication → Sign In / Up → Email**, make sure the Email
    provider is enabled (it is by default).
 4. Grab **Settings → API → Project URL** and the **anon public** key, then:
@@ -187,8 +187,10 @@ sign-in, invite redemption, shared events, and realtime RSVP sync.
      **Settings → Secrets and variables → Actions → New repository secret**,
      named `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, then re-run the
      "Deploy to GitHub Pages" workflow.
-5. Manage invites in the `invites` table — each code admits one member
-   (three starter codes are seeded, including `PEARL2026`).
+5. Optional: in **Authentication → Sign In / Up**, turn off **Confirm
+   email** for instant sign-up (otherwise new members click a
+   confirmation link first). To hand-approve members later, set the
+   `profiles.is_approved` default to false in the schema.
 
 Optional next step: swap `src/config/map.js` to Mapbox GL vector tiles for
 3D buildings and custom branding.

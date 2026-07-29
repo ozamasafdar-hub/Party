@@ -1,11 +1,8 @@
 <script setup>
 /**
- * LoginPanel — the sign-in / join form, usable as a page (LoginView) or as
- * a modal over the map (opened when a visitor tries to join or host).
- *
- *  - LIVE (Supabase configured): email → 6-digit code; first-timers also
- *    give a name + invite code, redeemed server-side.
- *  - DEMO: name + invite code, local session only.
+ * LoginPanel — log in / sign up with email + password. Used as a page
+ * (LoginView) and as a modal over the map (opened when a visitor tries
+ * to join or host an event).
  */
 import { reactive, ref } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
@@ -18,43 +15,34 @@ const emit = defineEmits(['success'])
 
 const authStore = useAuthStore()
 
-const form = reactive({ name: '', inviteCode: '', email: '', code: '' })
+const mode = ref('signin') // 'signin' | 'signup'
+const form = reactive({ name: '', email: '', password: '' })
 const error = ref('')
+const notice = ref('')
 const busy = ref(false)
-const step = ref('details') // live mode: 'details' → 'code'
 
-function submitDemo() {
+function switchMode() {
+  mode.value = mode.value === 'signin' ? 'signup' : 'signin'
   error.value = ''
-  try {
-    authStore.login(form)
-    emit('success')
-  } catch (e) {
-    error.value = e.message
-  }
+  notice.value = ''
 }
 
-async function submitEmail() {
+async function submit() {
   error.value = ''
-  if (!/.+@.+\..+/.test(form.email.trim())) {
-    error.value = 'Enter a valid email address.'
-    return
-  }
+  notice.value = ''
   busy.value = true
   try {
-    await authStore.requestCode(form.email)
-    step.value = 'code'
-  } catch (e) {
-    error.value = e.message
-  } finally {
-    busy.value = false
-  }
-}
-
-async function submitCode() {
-  error.value = ''
-  busy.value = true
-  try {
-    await authStore.verifyCode(form)
+    if (mode.value === 'signup') {
+      const result = await authStore.signUp(form)
+      if (result?.needsEmailConfirmation) {
+        notice.value =
+          'Almost there — we sent a confirmation link to your email. Open it, then log in here.'
+        mode.value = 'signin'
+        return
+      }
+    } else {
+      await authStore.signIn(form)
+    }
     emit('success')
   } catch (e) {
     error.value = e.message
@@ -71,107 +59,60 @@ async function submitCode() {
     <p class="login-panel__subtitle">
       <template v-if="prompt">{{ prompt }}</template>
       <template v-else>
-        Qatar's members-only social map.<br />
+        Qatar's social map.<br />
         See what's happening. Join in. Host your own.
       </template>
     </p>
 
-    <!-- LIVE: email + one-time code -->
-    <form
-      v-if="authStore.isLiveMode"
-      @submit.prevent="step === 'details' ? submitEmail() : submitCode()"
-    >
-      <template v-if="step === 'details'">
-        <label class="field-label" for="login-email">Email</label>
+    <form @submit.prevent="submit">
+      <template v-if="mode === 'signup'">
+        <label class="field-label" for="auth-name">Your name</label>
         <input
-          id="login-email"
-          v-model="form.email"
-          class="field-input"
-          type="email"
-          autocomplete="email"
-          placeholder="you@example.com"
-        />
-
-        <label class="field-label" for="login-name">
-          Your name <span class="login-panel__optional">(new members)</span>
-        </label>
-        <input
-          id="login-name"
+          id="auth-name"
           v-model="form.name"
           class="field-input"
           type="text"
           autocomplete="name"
           placeholder="e.g. Noora Al-Thani"
         />
-
-        <label class="field-label" for="login-code">
-          Invite code <span class="login-panel__optional">(new members)</span>
-        </label>
-        <input
-          id="login-code"
-          v-model="form.inviteCode"
-          class="field-input login-panel__code"
-          type="text"
-          autocomplete="off"
-          placeholder="MEMBERS ONLY"
-        />
       </template>
 
-      <template v-else>
-        <p class="login-panel__sent">
-          We emailed a 6-digit code to<br /><strong>{{ form.email }}</strong>
-        </p>
-        <label class="field-label" for="login-otp">Enter the code</label>
-        <input
-          id="login-otp"
-          v-model="form.code"
-          class="field-input login-panel__code"
-          type="text"
-          inputmode="numeric"
-          autocomplete="one-time-code"
-          maxlength="6"
-          placeholder="••••••"
-        />
-        <button type="button" class="login-panel__resend" :disabled="busy" @click="step = 'details'">
-          Wrong email? Go back
-        </button>
-      </template>
+      <label class="field-label" for="auth-email">Email</label>
+      <input
+        id="auth-email"
+        v-model="form.email"
+        class="field-input"
+        type="email"
+        autocomplete="email"
+        placeholder="you@example.com"
+      />
+
+      <label class="field-label" for="auth-password">Password</label>
+      <input
+        id="auth-password"
+        v-model="form.password"
+        class="field-input"
+        type="password"
+        :autocomplete="mode === 'signup' ? 'new-password' : 'current-password'"
+        :placeholder="mode === 'signup' ? 'At least 6 characters' : '••••••••'"
+      />
 
       <p v-if="error" class="login-panel__error">{{ error }}</p>
+      <p v-if="notice" class="login-panel__notice">{{ notice }}</p>
 
       <button type="submit" class="btn-primary login-panel__submit" :disabled="busy">
-        {{ busy ? 'One moment…' : step === 'details' ? 'Email me a code' : 'Enter the map' }}
+        {{ busy ? 'One moment…' : mode === 'signup' ? 'Create account' : 'Log in' }}
       </button>
     </form>
 
-    <!-- DEMO: name + invite code -->
-    <form v-else @submit.prevent="submitDemo">
-      <label class="field-label" for="login-name">Your name</label>
-      <input
-        id="login-name"
-        v-model="form.name"
-        class="field-input"
-        type="text"
-        autocomplete="name"
-        placeholder="e.g. Noora Al-Thani"
-      />
+    <button type="button" class="login-panel__switch" @click="switchMode">
+      <template v-if="mode === 'signin'">New here? <strong>Create an account</strong></template>
+      <template v-else>Already a member? <strong>Log in</strong></template>
+    </button>
 
-      <label class="field-label" for="login-code">Invite code</label>
-      <input
-        id="login-code"
-        v-model="form.inviteCode"
-        class="field-input login-panel__code"
-        type="text"
-        autocomplete="off"
-        placeholder="MEMBERS ONLY"
-      />
-
-      <p v-if="error" class="login-panel__error">{{ error }}</p>
-
-      <button type="submit" class="btn-primary login-panel__submit">Join · Sign in</button>
-
-      <p class="login-panel__hint">Demo invite code: <code>PEARL2026</code></p>
-    </form>
+    <p v-if="!authStore.isLiveMode" class="login-panel__hint">
+      Demo mode — accounts live only in this browser.
+    </p>
   </div>
 </template>
 
@@ -203,42 +144,17 @@ async function submitCode() {
   margin-top: 14px;
 }
 
-.login-panel__optional {
-  text-transform: none;
-  letter-spacing: 0;
-  font-weight: 500;
-  color: rgba(154, 165, 184, 0.7);
-}
-
-.login-panel__code {
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-weight: 600;
-}
-
-.login-panel__sent {
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-}
-
-.login-panel__sent strong {
-  color: var(--text-primary);
-}
-
-.login-panel__resend {
-  display: block;
-  margin: 10px auto 0;
-  font-size: 12.5px;
-  color: var(--text-secondary);
-  text-decoration: underline;
-}
-
 .login-panel__error {
   margin-top: 14px;
   font-size: 13px;
   color: var(--danger);
+}
+
+.login-panel__notice {
+  margin-top: 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--success);
 }
 
 .login-panel__submit {
@@ -246,14 +162,23 @@ async function submitCode() {
   margin-top: 22px;
 }
 
-.login-panel__hint {
-  margin-top: 18px;
-  font-size: 12px;
+.login-panel__switch {
+  margin-top: 16px;
+  font-size: 13.5px;
   color: var(--text-secondary);
 }
 
-.login-panel__hint code {
-  color: var(--gold);
-  font-weight: 700;
+.login-panel__switch strong {
+  color: var(--accent-bright);
+}
+
+.login-panel__switch:hover strong {
+  text-decoration: underline;
+}
+
+.login-panel__hint {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 </style>

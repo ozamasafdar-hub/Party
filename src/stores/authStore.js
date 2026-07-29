@@ -3,17 +3,17 @@ import { supabase, isLive } from '@/services/supabaseClient'
 import { toMember } from '@/services/eventService'
 
 const SESSION_KEY = 'wyn:session'
+const ACCOUNTS_KEY = 'wyn:accounts'
 
 /**
- * Members-only access, two modes:
+ * Email + password accounts, two modes:
  *
- *  - LIVE (Supabase configured): email + one-time code sign-in. First-time
- *    members must redeem an invite code (validated server-side by the
- *    redeem_invite() function), which approves their profile. Every later
- *    sign-in only needs the email code.
- *  - DEMO: name + invite code, session in localStorage.
+ *  - LIVE (Supabase configured): real Supabase Auth. Profiles are created
+ *    by a database trigger on sign-up. If the project requires email
+ *    confirmation, sign-up reports that instead of a session.
+ *  - DEMO: accounts stored in this browser's localStorage so the full
+ *    log-in / sign-up flow works with zero backend setup.
  */
-const DEMO_INVITE_CODES = ['PEARL2026', 'WYN-VIP', 'DOHA-CREW']
 
 const AVATAR_COLORS = ['#c62d55', '#38bdf8', '#2dd4a0', '#a78bfa', '#fbbf6e', '#fb7185']
 
@@ -40,6 +40,40 @@ const storage = {
     } catch {
       if (storage._mem) delete storage._mem[key]
     }
+  }
+}
+
+function readAccounts() {
+  try {
+    return JSON.parse(storage.get(ACCOUNTS_KEY)) || {}
+  } catch {
+    return {}
+  }
+}
+
+function makeDemoUser(name) {
+  const initials = name
+    .split(/\s+/)
+    .map((part) => part[0].toUpperCase())
+    .slice(0, 2)
+    .join('')
+  return {
+    id: `u-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`,
+    name,
+    initials,
+    avatarColor: AVATAR_COLORS[name.length % AVATAR_COLORS.length]
+  }
+}
+
+function validate({ name, email, password }, { requireName }) {
+  if (requireName && (!name || name.trim().length < 2)) {
+    throw new Error('Please enter your name.')
+  }
+  if (!/.+@.+\..+/.test((email || '').trim())) {
+    throw new Error('Enter a valid email address.')
+  }
+  if ((password || '').length < 6) {
+    throw new Error('Your password needs at least 6 characters.')
   }
 }
 
@@ -88,75 +122,75 @@ export const useAuthStore = defineStore('auth', {
       return data
     },
 
-    /* ---- live mode: email + one-time code -------------------------------- */
+    /** Log in with email + password. */
+    async signIn({ email, password }) {
+      const em = (email || '').trim().toLowerCase()
 
-    async requestCode(email) {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim().toLowerCase(),
-        options: { shouldCreateUser: true }
-      })
-      if (error) throw new Error(error.message)
-    },
-
-    async verifyCode({ email, code, name, inviteCode }) {
-      const { data, error } = await supabase.auth.verifyOtp({
-        email: email.trim().toLowerCase(),
-        token: code.trim(),
-        type: 'email'
-      })
-      if (error) throw new Error('That code didn\'t work — check it and try again.')
-
-      const profile = await this._loadProfile(data.user.id)
-      if (this.currentUser) return this.currentUser
-
-      // New or unapproved member — redeem an invite (server-validated)
-      if (!inviteCode?.trim()) {
-        throw new Error('You need an invite code to join. Ask a member for one.')
+      if (isLive) {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: em,
+          password
+        })
+        if (error) {
+          throw new Error(
+            /invalid login credentials/i.test(error.message)
+              ? 'Wrong email or password.'
+              : error.message
+          )
+        }
+        await this._loadProfile(data.user.id)
+        if (!this.currentUser) throw new Error('Your account is awaiting approval.')
+        return this.currentUser
       }
-      const { error: redeemError } = await supabase.rpc('redeem_invite', {
-        invite_code: inviteCode.trim().toUpperCase(),
-        member_name: (name || profile?.full_name || '').trim() || 'Member'
-      })
-      if (redeemError) {
-        throw new Error(
-          /INVALID_INVITE/.test(redeemError.message)
-            ? 'Invalid or already-used invite code. This community is invite-only.'
-            : redeemError.message
-        )
+
+      const account = readAccounts()[em]
+      if (!account || account.password !== password) {
+        throw new Error('Wrong email or password.')
       }
-      await this._loadProfile(data.user.id)
-      if (!this.currentUser) throw new Error('Your account is awaiting approval.')
+      this.currentUser = account.user
+      storage.set(SESSION_KEY, JSON.stringify(account.user))
       return this.currentUser
     },
 
-    /* ---- demo mode ------------------------------------------------------- */
+    /**
+     * Create an account with name, email + password.
+     * Live mode may return { needsEmailConfirmation: true } when the
+     * Supabase project requires confirming the address first.
+     */
+    async signUp({ name, email, password }) {
+      validate({ name, email, password }, { requireName: true })
+      const trimmedName = name.trim()
+      const em = email.trim().toLowerCase()
 
-    login({ name, inviteCode }) {
-      const code = inviteCode.trim().toUpperCase()
-      if (!DEMO_INVITE_CODES.includes(code)) {
-        throw new Error('Invalid invite code. This community is invite-only.')
+      if (isLive) {
+        const { data, error } = await supabase.auth.signUp({
+          email: em,
+          password,
+          options: { data: { full_name: trimmedName } }
+        })
+        if (error) {
+          throw new Error(
+            /already registered/i.test(error.message)
+              ? 'An account with this email already exists — log in instead.'
+              : error.message
+          )
+        }
+        if (!data.session) return { needsEmailConfirmation: true }
+        await this._loadProfile(data.user.id)
+        return this.currentUser
       }
-      const trimmed = name.trim()
-      if (trimmed.length < 2) {
-        throw new Error('Please enter your name.')
-      }
-      const initials = trimmed
-        .split(/\s+/)
-        .map((part) => part[0].toUpperCase())
-        .slice(0, 2)
-        .join('')
 
-      this.currentUser = {
-        id: `u-${trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-        name: trimmed,
-        initials,
-        avatarColor: AVATAR_COLORS[trimmed.length % AVATAR_COLORS.length]
+      const accounts = readAccounts()
+      if (accounts[em]) {
+        throw new Error('An account with this email already exists — log in instead.')
       }
-      storage.set(SESSION_KEY, JSON.stringify(this.currentUser))
+      const user = makeDemoUser(trimmedName)
+      accounts[em] = { password, user }
+      storage.set(ACCOUNTS_KEY, JSON.stringify(accounts))
+      this.currentUser = user
+      storage.set(SESSION_KEY, JSON.stringify(user))
       return this.currentUser
     },
-
-    /* ---------------------------------------------------------------------- */
 
     async logout() {
       if (isLive) await supabase.auth.signOut()
