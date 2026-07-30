@@ -286,10 +286,6 @@ export const useEventStore = defineStore('events', {
       return getExactLocation(eventId)
     },
 
-    async refreshMembers() {
-      this.members = await listMembers()
-    },
-
     _patch(event) {
       const i = this.events.findIndex((e) => e.id === event.id)
       if (i !== -1) this.events.splice(i, 1, event)

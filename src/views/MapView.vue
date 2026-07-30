@@ -175,7 +175,10 @@ async function onLoginSuccess() {
   const create = pendingCreate.value
   closeLogin()
   followStore.load(authStore.currentUser.id)
-  eventStore.refreshMembers() // fresh accounts appear on guestlists right away
+  // Refetch with the authenticated session: the snapshot (and realtime
+  // socket) from before login only saw what visitors are allowed to see.
+  eventStore.stopRealtime()
+  await eventStore.load()
   if (joinId) {
     // Paid events go through the checkout — land back on the card instead
     const target = eventStore.events.find((e) => e.id === joinId)

@@ -379,7 +379,7 @@ begin
     select reliability_score into score
       from public.profiles where id = new.user_id;
     if coalesce(score, 100) < min_rel then
-      raise exception 'RELIABILITY_TOO_LOW: this host requires a %%% attendance record', min_rel;
+      raise exception 'RELIABILITY_TOO_LOW: this host requires a % percent attendance record or better', min_rel;
     end if;
   end if;
 
@@ -498,16 +498,28 @@ end;
 $$;
 
 -- ----------------------------------------------------------------------------
--- Ladies-only events are visible only to female members (and the host)
+-- The map is PUBLIC (migration 003): anyone — signed in or not — can browse
+-- events, host profiles, and guestlists. Logging in is required only to
+-- join or host. Ladies-only events remain visible only to female members
+-- and their host. Payments, exact locations of blurred events, and chat
+-- messages stay members/participants-only.
 -- ----------------------------------------------------------------------------
 drop policy if exists "approved members read events" on public.events;
-create policy "approved members read events" on public.events
+drop policy if exists "anyone can read events" on public.events;
+create policy "anyone can read events" on public.events
   for select using (
-    exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_approved)
-    and (
-      not is_ladies_only
-      or host_id = auth.uid()
-      or exists (select 1 from public.profiles p2
-                  where p2.id = auth.uid() and p2.gender = 'female')
-    )
+    not is_ladies_only
+    or host_id = auth.uid()
+    or exists (select 1 from public.profiles p2
+                where p2.id = auth.uid() and p2.gender = 'female')
   );
+
+drop policy if exists "approved members read profiles" on public.profiles;
+drop policy if exists "anyone can read profiles" on public.profiles;
+create policy "anyone can read profiles" on public.profiles
+  for select using (true);
+
+drop policy if exists "approved members read rsvps" on public.rsvps;
+drop policy if exists "anyone can read rsvps" on public.rsvps;
+create policy "anyone can read rsvps" on public.rsvps
+  for select using (true);

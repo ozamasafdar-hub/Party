@@ -468,9 +468,11 @@ const live = {
   },
 
   async listMembers() {
+    // gender deliberately not selected — only your own profile needs it
+    // (ladies-only filtering), no reason to expose everyone else's
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, full_name, avatar_url, bio, gender, reliability_score, events_attended, events_flaked')
+      .select('id, full_name, avatar_url, bio, reliability_score, events_attended, events_flaked')
     if (error) throw friendly(error)
     return data.map(toMember)
   },

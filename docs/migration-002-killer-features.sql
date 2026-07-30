@@ -62,7 +62,7 @@ begin
     select reliability_score into score
       from public.profiles where id = new.user_id;
     if coalesce(score, 100) < min_rel then
-      raise exception 'RELIABILITY_TOO_LOW: this host requires a %%% attendance record', min_rel;
+      raise exception 'RELIABILITY_TOO_LOW: this host requires a % percent attendance record or better', min_rel;
     end if;
   end if;
 
