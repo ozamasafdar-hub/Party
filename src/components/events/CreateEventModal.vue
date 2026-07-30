@@ -67,6 +67,21 @@ function openPaywall(reason) {
   showPaywall.value = true
 }
 
+/* Guest-count picker: free sizes are tappable, bigger ones wear a 👑 and
+ * open the paywall — so new hosts see exactly where Pro starts. */
+const GUEST_COUNTS = [2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 75, 100]
+const showCapPicker = ref(false)
+
+function pickCapacity(n) {
+  if (!isPro.value && n > FREE_LIMITS.maxCapacity) {
+    showCapPicker.value = false
+    openPaywall(`Hosting more than ${FREE_LIMITS.maxCapacity} guests is a Host Pro feature.`)
+    return
+  }
+  form.maxCapacity = n
+  showCapPicker.value = false
+}
+
 /**
  * Intercepts a pro-only toggle for free hosts: block + show the paywall.
  * `allowed` arrives as a plain boolean (template refs auto-unwrap).
@@ -318,14 +333,14 @@ async function submit() {
         </div>
         <div>
           <label class="field-label" for="ev-cap">Max guests</label>
-          <input
+          <button
             id="ev-cap"
-            v-model.number="form.maxCapacity"
-            class="field-input"
-            type="number"
-            min="2"
-            :max="maxCapacity"
-          />
+            type="button"
+            class="field-input create-modal__cap-btn"
+            @click="showCapPicker = true"
+          >
+            👥 {{ form.maxCapacity }} <span class="create-modal__cap-caret">▾</span>
+          </button>
         </div>
       </div>
 
@@ -425,6 +440,39 @@ async function submit() {
         </button>
       </div>
     </form>
+
+    <!-- Guest-count picker: the free/pro boundary is visible up front -->
+    <div
+      v-if="showCapPicker"
+      class="create-modal__picker-backdrop"
+      @click.self="showCapPicker = false"
+    >
+      <div class="create-modal__picker glass-panel">
+        <h3 class="create-modal__picker-title">Max guests</h3>
+        <p v-if="!isPro" class="create-modal__picker-hint">
+          Up to {{ FREE_LIMITS.maxCapacity }} guests on the free plan —
+          👑 sizes unlock with Host Pro
+        </p>
+        <div class="create-modal__picker-grid">
+          <button
+            v-for="n in GUEST_COUNTS"
+            :key="n"
+            type="button"
+            class="create-modal__cap-option"
+            :class="{
+              'create-modal__cap-option--locked': !isPro && n > FREE_LIMITS.maxCapacity,
+              'create-modal__cap-option--active': form.maxCapacity === n
+            }"
+            @click="pickCapacity(n)"
+          >
+            {{ n }}<span
+              v-if="!isPro && n > FREE_LIMITS.maxCapacity"
+              class="create-modal__cap-crown"
+            >👑</span>
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Inside the root so the parent's v-show (pick-location flow) keeps
          working — this component must stay single-rooted. -->
@@ -661,6 +709,91 @@ async function submit() {
   flex-shrink: 0;
   padding: 8px 10px;
   text-align: right;
+}
+
+.create-modal__cap-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.create-modal__cap-caret {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.create-modal__picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 8, 15, 0.55);
+  padding: 16px;
+}
+
+.create-modal__picker {
+  width: min(340px, 100%);
+  padding: 20px;
+}
+
+.create-modal__picker-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.create-modal__picker-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--gold);
+}
+
+.create-modal__picker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.create-modal__cap-option {
+  position: relative;
+  padding: 11px 4px;
+  border-radius: var(--radius-sm);
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.create-modal__cap-option:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.create-modal__cap-option--active {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.create-modal__cap-option--locked {
+  color: var(--gold);
+  background: rgba(212, 175, 106, 0.07);
+  border: 1px dashed rgba(212, 175, 106, 0.4);
+}
+
+.create-modal__cap-crown {
+  position: absolute;
+  top: -7px;
+  right: -4px;
+  font-size: 10px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
 }
 
 .create-modal__cap-badge {
