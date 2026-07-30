@@ -58,7 +58,32 @@ export const useNotifStore = defineStore('notifications', {
             this.push(`${nameOf(id)} joined "${next.title}"`, next.id)
           }
         }
-      } else if (prev.attendeeIds.includes(meId)) {
+        for (const id of next.requestedIds || []) {
+          if (!(prev.requestedIds || []).includes(id)) {
+            this.push(`🙋 ${nameOf(id)} requested to join "${next.title}"`, next.id)
+            this.flash(`🙋 ${nameOf(id)} requested to join "${next.title}"`)
+          }
+        }
+        return
+      }
+
+      // My pending request got a verdict
+      const wasRequested = (prev.requestedIds || []).includes(meId)
+      if (wasRequested && next.attendeeIds.includes(meId)) {
+        this.push(`✅ Request approved — you're in for "${next.title}"!`, next.id)
+        this.flash(`✅ You're approved for "${next.title}"!`)
+        return
+      }
+      if (
+        wasRequested &&
+        !(next.requestedIds || []).includes(meId) &&
+        !next.attendeeIds.includes(meId)
+      ) {
+        this.push(`Your request for "${next.title}" was declined`, next.id)
+        return
+      }
+
+      if (prev.attendeeIds.includes(meId)) {
         const changed =
           prev.startsAt !== next.startsAt ||
           prev.title !== next.title ||
