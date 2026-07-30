@@ -17,6 +17,7 @@ import EventListPanel from '@/components/events/EventListPanel.vue'
 import LoginPanel from '@/components/auth/LoginPanel.vue'
 import MapStyleControl from '@/components/map/MapStyleControl.vue'
 import MapSearchBar from '@/components/map/MapSearchBar.vue'
+import TimePills from '@/components/map/TimePills.vue'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useNotifStore } from '@/stores/notifStore'
@@ -174,7 +175,11 @@ async function onLoginSuccess() {
   const create = pendingCreate.value
   closeLogin()
   followStore.load(authStore.currentUser.id)
+  eventStore.refreshMembers() // fresh accounts appear on guestlists right away
   if (joinId) {
+    // Paid events go through the checkout — land back on the card instead
+    const target = eventStore.events.find((e) => e.id === joinId)
+    if (target && Number(target.pricePerSpot) > 0) return
     try {
       await eventStore.smartJoin(joinId, authStore.currentUser.id)
     } catch {
@@ -313,6 +318,7 @@ function toggleList() {
           <button class="map-view__hint-cancel" @click="stopPickingLocation">Back to form</button>
         </div>
       </Transition>
+      <TimePills v-if="!pickMode && !pickingLocation && !selectedEvent && !showList" />
       <button v-if="!pickMode && !showCreateModal" class="btn-primary map-view__fab" @click="openCreate">
         ＋ Create an event
       </button>

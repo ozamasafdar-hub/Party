@@ -14,7 +14,8 @@ const authStore = useAuthStore()
 
 const form = reactive({
   name: authStore.currentUser.name,
-  bio: authStore.currentUser.bio || ''
+  bio: authStore.currentUser.bio || '',
+  gender: authStore.currentUser.gender || ''
 })
 const avatarPreview = ref(authStore.currentUser.avatarUrl || null)
 const newAvatar = ref(null)
@@ -43,6 +44,7 @@ async function save() {
     await authStore.updateProfile({
       name: form.name,
       bio: form.bio,
+      gender: form.gender || null,
       avatarDataUrl: newAvatar.value
     })
     emit('saved')
@@ -92,6 +94,15 @@ async function save() {
         maxlength="160"
         placeholder="A line about you — favorite plans, neighborhoods, sports…"
       />
+
+      <label class="field-label" for="ep-gender">
+        Gender <span class="edit-profile__optional">(optional — unlocks ladies-only events)</span>
+      </label>
+      <select id="ep-gender" v-model="form.gender" class="field-input">
+        <option value="">Prefer not to say</option>
+        <option value="female">Female</option>
+        <option value="male">Male</option>
+      </select>
 
       <p v-if="error" class="edit-profile__error">{{ error }}</p>
 
@@ -166,6 +177,13 @@ async function save() {
 .edit-profile__bio {
   resize: vertical;
   min-height: 56px;
+}
+
+.edit-profile__optional {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  color: rgba(154, 165, 184, 0.7);
 }
 
 .edit-profile__error {

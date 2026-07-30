@@ -19,9 +19,53 @@ import { supabase, isLive } from './supabaseClient'
 /* ========================================================================== */
 
 const db = {
-  events: SEED_EVENTS.map((e) => ({ ...e, attendeeIds: [...e.attendeeIds], waitlistIds: [] })),
-  members: [...SEED_MEMBERS],
+  events: SEED_EVENTS.map((e) => ({
+    ...e,
+    attendeeIds: [...e.attendeeIds],
+    waitlistIds: [],
+    requestedIds: [...(e.requestedIds || [])],
+    payments: {}
+  })),
+  members: SEED_MEMBERS.map((m) => ({ ...m })),
   messages: SEED_MESSAGES.map((m) => ({ ...m }))
+}
+
+function demoReliabilityOf(userId) {
+  return db.members.find((m) => m.id === userId)?.reliability ?? 100
+}
+
+/**
+ * Demo accounts live in this browser's localStorage — surface them in the
+ * members list so hosts see real names (and reliability history sticks).
+ * Attendance history already in the demo db wins over the copy the auth
+ * session carries, so recorded no-shows aren't clobbered on re-login.
+ */
+function demoUpsertMember(user) {
+  if (!user?.id) return
+  const i = db.members.findIndex((m) => m.id === user.id)
+  const existing = i === -1 ? null : db.members[i]
+  const member = {
+    id: user.id,
+    name: user.name,
+    initials: user.initials,
+    avatarColor: user.avatarColor,
+    avatarUrl: user.avatarUrl ?? null,
+    bio: user.bio ?? '',
+    gender: user.gender ?? null,
+    reliability: existing?.reliability ?? user.reliability ?? 100,
+    attended: existing?.attended ?? user.attended ?? 0,
+    flaked: existing?.flaked ?? user.flaked ?? 0
+  }
+  if (i === -1) db.members.push(member)
+  else db.members[i] = member
+}
+
+function demoGateReliability(event, userId) {
+  if (event.minReliability != null && demoReliabilityOf(userId) < event.minReliability) {
+    throw new Error(
+      `This host requires a ${event.minReliability}%+ attendance record`
+    )
+  }
 }
 
 const listeners = new Set()
@@ -39,7 +83,9 @@ function clone(event) {
   return {
     ...event,
     attendeeIds: [...event.attendeeIds],
-    waitlistIds: [...(event.waitlistIds || [])]
+    waitlistIds: [...(event.waitlistIds || [])],
+    requestedIds: [...(event.requestedIds || [])],
+    payments: { ...(event.payments || {}) }
   }
 }
 
@@ -78,12 +124,22 @@ const demo = {
       locationName: data.locationName.trim(),
       lat: data.lat,
       lng: data.lng,
+      exactLat: data.exactLat ?? null,
+      exactLng: data.exactLng ?? null,
       startsAt: data.startsAt,
       durationMinutes: data.durationMinutes,
       maxCapacity: data.maxCapacity,
       coverUrl: data.coverDataUrl || null,
+      approvalMode: !!data.approvalMode,
+      minReliability: data.minReliability ?? null,
+      pricePerSpot: data.pricePerSpot || 0,
+      ladiesOnly: !!data.ladiesOnly,
+      locationBlurred: !!data.locationBlurred,
+      attendanceRecorded: false,
       attendeeIds: [host.id],
-      waitlistIds: []
+      waitlistIds: [],
+      requestedIds: [],
+      payments: {}
     }
     db.events.push(event)
     emit({ type: 'INSERT', event: clone(event) })
@@ -100,6 +156,10 @@ const demo = {
       startsAt: data.startsAt,
       durationMinutes: data.durationMinutes,
       maxCapacity: data.maxCapacity,
+      approvalMode: !!data.approvalMode,
+      minReliability: data.minReliability ?? null,
+      pricePerSpot: data.pricePerSpot || 0,
+      ladiesOnly: !!data.ladiesOnly,
       ...(data.coverDataUrl ? { coverUrl: data.coverDataUrl } : {})
     })
     demoPromote(event)
@@ -116,11 +176,50 @@ const demo = {
   async joinEvent(eventId, userId) {
     const event = demoFind(eventId)
     if (event.attendeeIds.includes(userId)) return clone(event)
+    demoGateReliability(event, userId)
     if (event.attendeeIds.length >= event.maxCapacity) {
       throw new Error('This event is already full')
     }
     event.waitlistIds = event.waitlistIds.filter((id) => id !== userId)
+    event.requestedIds = event.requestedIds.filter((id) => id !== userId)
     event.attendeeIds.push(userId)
+    if (event.payments[userId]?.status === 'pending') {
+      event.payments[userId].status = 'held_in_escrow'
+    }
+    emit({ type: 'UPDATE', event: clone(event) })
+    return clone(event)
+  },
+
+  async requestJoin(eventId, userId) {
+    const event = demoFind(eventId)
+    if (event.attendeeIds.includes(userId) || event.requestedIds.includes(userId)) {
+      return clone(event)
+    }
+    demoGateReliability(event, userId)
+    event.requestedIds.push(userId)
+    emit({ type: 'UPDATE', event: clone(event) })
+    return clone(event)
+  },
+
+  async approveRequest(eventId, userId) {
+    const event = demoFind(eventId)
+    if (!event.requestedIds.includes(userId)) return clone(event)
+    if (event.attendeeIds.length >= event.maxCapacity) {
+      throw new Error('This event is already full')
+    }
+    event.requestedIds = event.requestedIds.filter((id) => id !== userId)
+    event.attendeeIds.push(userId)
+    if (event.payments[userId]?.status === 'pending') {
+      event.payments[userId].status = 'held_in_escrow'
+    }
+    emit({ type: 'UPDATE', event: clone(event) })
+    return clone(event)
+  },
+
+  async declineRequest(eventId, userId) {
+    const event = demoFind(eventId)
+    event.requestedIds = event.requestedIds.filter((id) => id !== userId)
+    if (event.payments[userId]) event.payments[userId].status = 'refunded'
     emit({ type: 'UPDATE', event: clone(event) })
     return clone(event)
   },
@@ -130,6 +229,7 @@ const demo = {
     if (event.attendeeIds.includes(userId) || event.waitlistIds.includes(userId)) {
       return clone(event)
     }
+    demoGateReliability(event, userId)
     event.waitlistIds.push(userId)
     emit({ type: 'UPDATE', event: clone(event) })
     return clone(event)
@@ -140,9 +240,45 @@ const demo = {
     if (event.hostId === userId) throw new Error('Hosts cannot leave their own event')
     event.attendeeIds = event.attendeeIds.filter((id) => id !== userId)
     event.waitlistIds = event.waitlistIds.filter((id) => id !== userId)
+    event.requestedIds = event.requestedIds.filter((id) => id !== userId)
+    if (event.payments[userId]) event.payments[userId].status = 'refunded'
     demoPromote(event)
     emit({ type: 'UPDATE', event: clone(event) })
     return clone(event)
+  },
+
+  /** Simulated escrow — records the payment locally. */
+  async recordPayment(eventId, userId, amount, status) {
+    const event = demoFind(eventId)
+    event.payments[userId] = { amount, status }
+    emit({ type: 'UPDATE', event: clone(event) })
+    return clone(event)
+  },
+
+  async recordAttendance(eventId, hostId, noShowIds) {
+    const event = demoFind(eventId)
+    if (event.hostId !== hostId) throw new Error('Only the host can record attendance')
+    if (event.attendanceRecorded) throw new Error('Attendance already recorded')
+    for (const guestId of event.attendeeIds) {
+      if (guestId === hostId) continue
+      const member = db.members.find((m) => m.id === guestId)
+      if (!member) continue
+      if (noShowIds.includes(guestId)) member.flaked += 1
+      else member.attended += 1
+      member.reliability = Math.round(
+        (100 * member.attended) / Math.max(1, member.attended + member.flaked)
+      )
+    }
+    event.attendanceRecorded = true
+    emit({ type: 'UPDATE', event: clone(event) })
+    return clone(event)
+  },
+
+  async getExactLocation(eventId) {
+    const event = demoFind(eventId)
+    return event.exactLat != null
+      ? { lat: event.exactLat, lng: event.exactLng }
+      : { lat: event.lat, lng: event.lng }
   },
 
   subscribeToEvents(callback) {
@@ -243,15 +379,21 @@ export function toMember(profile) {
     initials: initialsOf(profile.full_name || ''),
     avatarColor: colorFor(profile.id),
     avatarUrl: profile.avatar_url || null,
-    bio: profile.bio || ''
+    bio: profile.bio || '',
+    gender: profile.gender || null,
+    reliability: Number(profile.reliability_score ?? 100),
+    attended: profile.events_attended ?? 0,
+    flaked: profile.events_flaked ?? 0
   }
 }
 
 function toEvent(row) {
   const rsvps = row.rsvps || []
-  const waitlist = rsvps
-    .filter((r) => r.status === 'waitlist')
-    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  const byStatus = (status) =>
+    rsvps
+      .filter((r) => r.status === status)
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+      .map((r) => r.user_id)
   return {
     id: row.id,
     hostId: row.host_id,
@@ -265,8 +407,21 @@ function toEvent(row) {
     durationMinutes: row.duration_minutes,
     maxCapacity: row.max_capacity,
     coverUrl: row.cover_url || null,
-    attendeeIds: rsvps.filter((r) => r.status === 'going').map((r) => r.user_id),
-    waitlistIds: waitlist.map((r) => r.user_id)
+    approvalMode: !!row.approval_mode,
+    minReliability: row.min_reliability ?? null,
+    pricePerSpot: Number(row.price_per_spot || 0),
+    ladiesOnly: !!row.is_ladies_only,
+    locationBlurred: !!row.is_location_blurred,
+    attendanceRecorded: !!row.attendance_recorded,
+    attendeeIds: byStatus('going'),
+    waitlistIds: byStatus('waitlist'),
+    requestedIds: byStatus('requested'),
+    payments: Object.fromEntries(
+      (row.rsvp_payments || []).map((p) => [
+        p.user_id,
+        { amount: Number(p.amount), status: p.status }
+      ])
+    )
   }
 }
 
@@ -282,6 +437,9 @@ function toMessage(row) {
 
 function friendly(error) {
   if (/EVENT_FULL/.test(error.message)) return new Error('This event is already full')
+  if (/RELIABILITY_TOO_LOW/.test(error.message)) {
+    return new Error('This host requires a higher attendance record to join')
+  }
   return new Error(error.message)
 }
 
@@ -295,7 +453,8 @@ async function uploadCover(userId, coverDataUrl) {
   return supabase.storage.from('covers').getPublicUrl(path).data.publicUrl
 }
 
-const EVENT_SELECT = '*, rsvps(user_id, status, created_at)'
+const EVENT_SELECT =
+  '*, rsvps(user_id, status, created_at), rsvp_payments(user_id, status, amount)'
 
 const live = {
   async listEvents() {
@@ -311,7 +470,7 @@ const live = {
   async listMembers() {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, full_name, avatar_url, bio')
+      .select('id, full_name, avatar_url, bio, gender, reliability_score, events_attended, events_flaked')
     if (error) throw friendly(error)
     return data.map(toMember)
   },
@@ -331,13 +490,26 @@ const live = {
         starts_at: data.startsAt,
         duration_minutes: data.durationMinutes,
         max_capacity: data.maxCapacity,
-        cover_url
+        cover_url,
+        approval_mode: !!data.approvalMode,
+        min_reliability: data.minReliability ?? null,
+        price_per_spot: data.pricePerSpot || 0,
+        is_ladies_only: !!data.ladiesOnly,
+        is_location_blurred: !!data.locationBlurred
       })
       .select(EVENT_SELECT)
       .single()
     if (error) throw friendly(error)
     // Host always attends their own event
     await supabase.from('rsvps').insert({ event_id: row.id, user_id: host.id })
+    // Blurred events keep the exact spot in a guarded side table
+    if (data.locationBlurred && data.exactLat != null) {
+      await supabase.from('event_locations').insert({
+        event_id: row.id,
+        lat: data.exactLat,
+        lng: data.exactLng
+      })
+    }
     return { ...toEvent(row), attendeeIds: [host.id] }
   },
 
@@ -349,7 +521,11 @@ const live = {
       location_name: data.locationName.trim(),
       starts_at: data.startsAt,
       duration_minutes: data.durationMinutes,
-      max_capacity: data.maxCapacity
+      max_capacity: data.maxCapacity,
+      approval_mode: !!data.approvalMode,
+      min_reliability: data.minReliability ?? null,
+      price_per_spot: data.pricePerSpot || 0,
+      is_ladies_only: !!data.ladiesOnly
     }
     if (data.coverDataUrl) {
       const { data: current } = await supabase
@@ -393,6 +569,74 @@ const live = {
     return live.fetchEvent(eventId)
   },
 
+  async requestJoin(eventId, userId) {
+    const { error } = await supabase
+      .from('rsvps')
+      .upsert({ event_id: eventId, user_id: userId, status: 'requested' })
+    if (error) throw friendly(error)
+    return live.fetchEvent(eventId)
+  },
+
+  async approveRequest(eventId, userId) {
+    const { error } = await supabase
+      .from('rsvps')
+      .update({ status: 'going' })
+      .eq('event_id', eventId)
+      .eq('user_id', userId)
+      .eq('status', 'requested')
+    if (error) throw friendly(error)
+    await supabase
+      .from('rsvp_payments')
+      .update({ status: 'held_in_escrow' })
+      .eq('event_id', eventId)
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+    return live.fetchEvent(eventId)
+  },
+
+  async declineRequest(eventId, userId) {
+    const { error } = await supabase
+      .from('rsvps')
+      .delete()
+      .eq('event_id', eventId)
+      .eq('user_id', userId)
+      .eq('status', 'requested')
+    if (error) throw friendly(error)
+    await supabase
+      .from('rsvp_payments')
+      .update({ status: 'refunded' })
+      .eq('event_id', eventId)
+      .eq('user_id', userId)
+    return live.fetchEvent(eventId)
+  },
+
+  /** Simulated escrow — records the payment row. */
+  async recordPayment(eventId, userId, amount, status) {
+    const { error } = await supabase
+      .from('rsvp_payments')
+      .upsert({ event_id: eventId, user_id: userId, amount, status })
+    if (error) throw friendly(error)
+    return live.fetchEvent(eventId)
+  },
+
+  async recordAttendance(eventId, _hostId, noShowIds) {
+    const { error } = await supabase.rpc('record_attendance', {
+      p_event_id: eventId,
+      no_show_ids: noShowIds
+    })
+    if (error) throw friendly(error)
+    return live.fetchEvent(eventId)
+  },
+
+  async getExactLocation(eventId) {
+    const { data } = await supabase
+      .from('event_locations')
+      .select('lat, lng')
+      .eq('event_id', eventId)
+      .maybeSingle()
+    return data || null
+  },
+
   async leaveEvent(eventId, userId) {
     const { error } = await supabase
       .from('rsvps')
@@ -400,6 +644,11 @@ const live = {
       .eq('event_id', eventId)
       .eq('user_id', userId)
     if (error) throw friendly(error)
+    await supabase
+      .from('rsvp_payments')
+      .update({ status: 'refunded' })
+      .eq('event_id', eventId)
+      .eq('user_id', userId)
     return live.fetchEvent(eventId)
   },
 
@@ -512,6 +761,12 @@ export const updateEvent = (...a) => backend.updateEvent(...a)
 export const cancelEvent = (...a) => backend.cancelEvent(...a)
 export const joinEvent = (...a) => backend.joinEvent(...a)
 export const joinWaitlist = (...a) => backend.joinWaitlist(...a)
+export const requestJoin = (...a) => backend.requestJoin(...a)
+export const approveRequest = (...a) => backend.approveRequest(...a)
+export const declineRequest = (...a) => backend.declineRequest(...a)
+export const recordPayment = (...a) => backend.recordPayment(...a)
+export const recordAttendance = (...a) => backend.recordAttendance(...a)
+export const getExactLocation = (...a) => backend.getExactLocation(...a)
 export const leaveEvent = (...a) => backend.leaveEvent(...a)
 export const subscribeToEvents = (...a) => backend.subscribeToEvents(...a)
 export const listMessages = (...a) => backend.listMessages(...a)
@@ -520,3 +775,8 @@ export const subscribeToMessages = (...a) => backend.subscribeToMessages(...a)
 export const listFollowing = (...a) => backend.listFollowing(...a)
 export const follow = (...a) => backend.follow(...a)
 export const unfollow = (...a) => backend.unfollow(...a)
+
+/** Demo only — live mode manages profiles server-side. */
+export const upsertDemoMember = (user) => {
+  if (!isLive) demoUpsertMember(user)
+}

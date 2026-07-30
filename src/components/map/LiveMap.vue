@@ -42,6 +42,7 @@ const mapEl = ref(null)
 let map = null
 let clusterGroup = null
 let markersById = new Map()
+let blurCirclesById = new Map()
 let draftMarker = null
 let locationMarker = null
 let refreshTimer = null
@@ -159,6 +160,7 @@ onBeforeUnmount(() => {
   vectorCleanup = null
   baseLayers = []
   markersById = new Map()
+  blurCirclesById = new Map()
 })
 
 /* --- plotting event coordinates ----------------------------------------- */
@@ -176,6 +178,27 @@ function renderMarkers(events) {
       friend: followStore.isFriendEvent(event)
     }
     const existing = markersById.get(event.id)
+
+    // Blurred-location events get a dashed "somewhere around here" circle
+    if (event.locationBlurred) {
+      const circle = blurCirclesById.get(event.id)
+      if (circle) {
+        circle.setLatLng([event.lat, event.lng])
+      } else {
+        blurCirclesById.set(
+          event.id,
+          L.circle([event.lat, event.lng], {
+            radius: 300,
+            color: '#38bdf8',
+            weight: 2,
+            dashArray: '6 6',
+            fillColor: '#38bdf8',
+            fillOpacity: 0.07,
+            interactive: false
+          }).addTo(map)
+        )
+      }
+    }
 
     if (existing) {
       existing.setLatLng([event.lat, event.lng])
@@ -207,6 +230,12 @@ function renderMarkers(events) {
     if (!seen.has(id)) {
       clusterGroup.removeLayer(marker)
       markersById.delete(id)
+    }
+  }
+  for (const [id, circle] of blurCirclesById) {
+    if (!seen.has(id)) {
+      circle.remove()
+      blurCirclesById.delete(id)
     }
   }
 }

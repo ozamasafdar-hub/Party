@@ -7,10 +7,16 @@ import {
   cancelEvent,
   joinEvent,
   joinWaitlist,
+  requestJoin,
+  approveRequest,
+  declineRequest,
+  recordPayment,
+  recordAttendance,
+  getExactLocation,
   leaveEvent,
   subscribeToEvents
 } from '@/services/eventService'
-import { hasEnded, isLive } from '@/utils/datetime'
+import { hasEnded, isLive, isTonight, isTomorrow, isWeekend } from '@/utils/datetime'
 import { useNotifStore } from './notifStore'
 import { useAuthStore } from './authStore'
 
@@ -36,10 +42,17 @@ export const useEventStore = defineStore('events', {
       const weekAhead = new Date(now.getTime() + 7 * 86400000)
       const authStore = useAuthStore()
       const meId = authStore.currentUser?.id
+      const myGender = authStore.currentUser?.gender
       return state.events.filter((e) => {
         if (hasEnded(e, now)) return false
+        // Ladies-only events are visible to female members and the host
+        // (live mode additionally enforces this server-side via RLS)
+        if (e.ladiesOnly && myGender !== 'female' && e.hostId !== meId) return false
         if (state.activeCategory && e.category !== state.activeCategory) return false
         if (state.timeWindow === 'now' && !isLive(e, now)) return false
+        if (state.timeWindow === 'tonight' && !isTonight(e, now)) return false
+        if (state.timeWindow === 'tomorrow' && !isTomorrow(e, now)) return false
+        if (state.timeWindow === 'weekend' && !isWeekend(e, now)) return false
         if (state.timeWindow === 'today' && new Date(e.startsAt) > endOfToday) return false
         if (state.timeWindow === 'week' && new Date(e.startsAt) > weekAhead) return false
         if (
@@ -75,6 +88,14 @@ export const useEventStore = defineStore('events', {
 
     isWaitlisted() {
       return (event, userId) => (event.waitlistIds || []).includes(userId)
+    },
+
+    isRequested() {
+      return (event, userId) => (event.requestedIds || []).includes(userId)
+    },
+
+    paymentFor() {
+      return (event, userId) => (event.payments || {})[userId] || null
     },
 
     waitlistPosition() {
@@ -208,13 +229,70 @@ export const useEventStore = defineStore('events', {
       return event
     },
 
-    /** Join if there's room, otherwise queue on the waitlist. */
+    /** Request / join / waitlist — whichever the event calls for. */
     async smartJoin(eventId, userId) {
       const event = this.events.find((e) => e.id === eventId)
+      if (event?.approvalMode) return this.requestJoin(eventId, userId)
       if (event && event.attendeeIds.length >= event.maxCapacity) {
         return this.joinWaitlist(eventId, userId)
       }
       return this.rsvp(eventId, userId)
+    },
+
+    async requestJoin(eventId, userId) {
+      const event = await requestJoin(eventId, userId)
+      this._patch(event)
+      const notifStore = useNotifStore()
+      notifStore.flash(`📨 Request sent for "${event.title}" — the host will review it`)
+      notifStore.push(`You requested to join "${event.title}"`, event.id)
+      return event
+    },
+
+    async approve(eventId, userId) {
+      const event = await approveRequest(eventId, userId)
+      this._patch(event)
+      useNotifStore().flash(`✅ ${this.memberById(userId)?.name || 'Guest'} approved`)
+      return event
+    },
+
+    async decline(eventId, userId) {
+      const event = await declineRequest(eventId, userId)
+      this._patch(event)
+      return event
+    },
+
+    /**
+     * Simulated payment then join/request. Escrow status: instant-join
+     * events hold the payment; approval events keep it pending until the
+     * host approves.
+     */
+    async payAndJoin(eventId, userId, amount) {
+      const event = this.events.find((e) => e.id === eventId)
+      const status = event?.approvalMode ? 'pending' : 'held_in_escrow'
+      await recordPayment(eventId, userId, amount, status)
+      return this.smartJoin(eventId, userId)
+    },
+
+    async markAttendance(eventId, hostId, noShowIds) {
+      const event = await recordAttendance(eventId, hostId, noShowIds)
+      this._patch(event)
+      useNotifStore().flash('Attendance recorded — reliability scores updated')
+      // Refresh member reliability numbers
+      this.members = await listMembers()
+      return event
+    },
+
+    async fetchExactLocation(eventId) {
+      return getExactLocation(eventId)
+    },
+
+    async refreshMembers() {
+      this.members = await listMembers()
+    },
+
+    _patch(event) {
+      const i = this.events.findIndex((e) => e.id === event.id)
+      if (i !== -1) this.events.splice(i, 1, event)
     },
 
     async cancelRsvp(eventId, userId) {

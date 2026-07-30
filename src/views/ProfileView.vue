@@ -20,9 +20,11 @@ const authStore = useAuthStore()
 const eventStore = useEventStore()
 const followStore = useFollowStore()
 
+// Optional chaining throughout: signing out nulls currentUser while this
+// view is still mounted, a tick before the router leaves it.
 const me = computed(() => authStore.currentUser)
-const viewedId = computed(() => route.params.id || me.value.id)
-const isSelf = computed(() => viewedId.value === me.value.id)
+const viewedId = computed(() => route.params.id || me.value?.id)
+const isSelf = computed(() => !!me.value && viewedId.value === me.value.id)
 
 const member = computed(() =>
   isSelf.value ? me.value : eventStore.memberById(viewedId.value)
@@ -37,7 +39,7 @@ const followBusy = ref(false)
 
 onMounted(async () => {
   if (!eventStore.events.length) eventStore.load()
-  await followStore.load(me.value.id)
+  if (me.value) await followStore.load(me.value.id)
 })
 
 async function toggleFollow() {
@@ -73,6 +75,9 @@ function logout() {
           <div class="profile__identity">
             <h1 class="profile__name">{{ member.name }}</h1>
             <p v-if="member.bio" class="profile__bio">{{ member.bio }}</p>
+            <p class="profile__reliability">
+              ⭐ {{ member.reliability ?? 100 }}% reliable · {{ member.attended ?? 0 }} attended
+            </p>
             <p class="profile__stats">
               <span><strong>{{ hosted.length }}</strong> hosted</span>
               <span><strong>{{ attended.length }}</strong> attending</span>
@@ -179,6 +184,13 @@ function logout() {
   font-size: 13.5px;
   line-height: 1.45;
   color: var(--text-secondary);
+}
+
+.profile__reliability {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold);
 }
 
 .profile__stats {

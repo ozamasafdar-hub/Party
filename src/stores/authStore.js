@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { supabase, isLive } from '@/services/supabaseClient'
-import { toMember } from '@/services/eventService'
+import { toMember, upsertDemoMember } from '@/services/eventService'
 
 const SESSION_KEY = 'wyn:session'
 const ACCOUNTS_KEY = 'wyn:accounts'
@@ -61,7 +61,11 @@ function makeDemoUser(name) {
     id: `u-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`,
     name,
     initials,
-    avatarColor: AVATAR_COLORS[name.length % AVATAR_COLORS.length]
+    avatarColor: AVATAR_COLORS[name.length % AVATAR_COLORS.length],
+    gender: null,
+    reliability: 100,
+    attended: 0,
+    flaked: 0
   }
 }
 
@@ -107,6 +111,7 @@ export const useAuthStore = defineStore('auth', {
       try {
         const raw = storage.get(SESSION_KEY)
         if (raw) this.currentUser = JSON.parse(raw)
+        if (this.currentUser) upsertDemoMember(this.currentUser)
       } catch {
         storage.remove(SESSION_KEY)
       }
@@ -115,7 +120,9 @@ export const useAuthStore = defineStore('auth', {
     async _loadProfile(userId) {
       const { data } = await supabase
         .from('profiles')
-        .select('id, full_name, avatar_url, bio, is_approved')
+        .select(
+          'id, full_name, avatar_url, bio, gender, reliability_score, events_attended, events_flaked, is_approved'
+        )
         .eq('id', userId)
         .maybeSingle()
       if (data?.is_approved) this.currentUser = toMember(data)
@@ -149,6 +156,7 @@ export const useAuthStore = defineStore('auth', {
       }
       this.currentUser = account.user
       storage.set(SESSION_KEY, JSON.stringify(account.user))
+      upsertDemoMember(account.user)
       return this.currentUser
     },
 
@@ -189,6 +197,7 @@ export const useAuthStore = defineStore('auth', {
       storage.set(ACCOUNTS_KEY, JSON.stringify(accounts))
       this.currentUser = user
       storage.set(SESSION_KEY, JSON.stringify(user))
+      upsertDemoMember(user)
       return this.currentUser
     },
 
@@ -197,10 +206,11 @@ export const useAuthStore = defineStore('auth', {
      * JPEG data URL from the edit form. Live mode uploads it to Supabase
      * Storage; demo mode keeps everything in this browser.
      */
-    async updateProfile({ name, bio, avatarDataUrl }) {
+    async updateProfile({ name, bio, gender, avatarDataUrl }) {
       const trimmed = (name || '').trim()
       if (trimmed.length < 2) throw new Error('Please enter your name.')
       const cleanBio = (bio || '').trim().slice(0, 160)
+      const cleanGender = ['female', 'male'].includes(gender) ? gender : null
 
       if (isLive) {
         let avatar_url
@@ -222,6 +232,7 @@ export const useAuthStore = defineStore('auth', {
           .update({
             full_name: trimmed,
             bio: cleanBio || null,
+            gender: cleanGender,
             ...(avatar_url ? { avatar_url } : {})
           })
           .eq('id', this.currentUser.id)
@@ -240,10 +251,12 @@ export const useAuthStore = defineStore('auth', {
         name: trimmed,
         initials,
         bio: cleanBio,
+        gender: cleanGender,
         avatarUrl: avatarDataUrl ?? this.currentUser.avatarUrl ?? null
       }
       this.currentUser = user
       storage.set(SESSION_KEY, JSON.stringify(user))
+      upsertDemoMember(user)
       const accounts = readAccounts()
       for (const email of Object.keys(accounts)) {
         if (accounts[email].user?.id === user.id) accounts[email].user = user

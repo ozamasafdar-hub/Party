@@ -31,13 +31,23 @@ export function buildEventIcon(
          background:${color}; opacity:0.5; pointer-events:none;"></span>`
     : ''
 
+  // Ladies-only events wear a small 🚺 badge on the pin's shoulder
+  const ladies = event.ladiesOnly
+    ? `<g>
+        <circle cx="8" cy="10" r="9" fill="#f472b6" stroke="#0b0f19" stroke-width="2"/>
+        <text x="8" y="13.6" text-anchor="middle" font-size="10"
+              font-family="Inter, system-ui, sans-serif">🚺</text>
+      </g>`
+    : ''
+
   const html = `
     ${pulse}
     <svg width="${PIN_W}" height="${PIN_H}" viewBox="0 0 46 60"
          xmlns="http://www.w3.org/2000/svg" style="position:relative;display:block">
       <path d="M23 2C11.4 2 2 11.2 2 22.6 2 33 10 41.4 19.6 52.8c1.8 2.1 5 2.1 6.8 0
                C36 41.4 44 33 44 22.6 44 11.2 34.6 2 23 2Z"
-            fill="${color}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+            fill="${color}" stroke="${stroke}" stroke-width="${strokeWidth}"
+            ${event.locationBlurred ? 'stroke-dasharray="5 3"' : ''}/>
       <circle cx="23" cy="21" r="14" fill="rgba(11,15,25,0.28)"/>
       <g transform="translate(13.4,11.4) scale(0.8)">
         <path d="${glyph}" fill="#ffffff"/>
@@ -47,6 +57,7 @@ export function buildEventIcon(
         <text x="38" y="13.4" text-anchor="middle" font-size="10" font-weight="700"
               font-family="Inter, system-ui, sans-serif" fill="#0b0f19">${full ? '×' : count}</text>
       </g>
+      ${ladies}
     </svg>`
 
   return L.divIcon({

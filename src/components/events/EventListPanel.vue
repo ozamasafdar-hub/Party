@@ -23,8 +23,10 @@ const sortNearest = ref(false)
 
 const WINDOWS = [
   { key: 'all', label: 'All' },
-  { key: 'now', label: 'Now' },
-  { key: 'today', label: 'Today' },
+  { key: 'now', label: '🔥 Now' },
+  { key: 'tonight', label: '🌙 Tonight' },
+  { key: 'tomorrow', label: '📅 Tomorrow' },
+  { key: 'weekend', label: '🎉 Weekend' },
   { key: 'week', label: 'Week' }
 ]
 

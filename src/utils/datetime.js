@@ -48,6 +48,36 @@ export function hasEnded(event, now = new Date()) {
   return now.getTime() > end
 }
 
+/** Tonight = starts today from 17:00, up to 04:00 tomorrow (or live now). */
+export function isTonight(event, now = new Date()) {
+  if (isLive(event, now)) return true
+  const start = new Date(event.startsAt)
+  if (start < now) return false
+  const cutoff = new Date(now)
+  cutoff.setHours(28, 0, 0, 0) // 04:00 tomorrow
+  return start <= cutoff && (start.getDate() !== now.getDate() || start.getHours() >= 17)
+}
+
+export function isTomorrow(event, now = new Date()) {
+  const start = new Date(event.startsAt)
+  const tomorrow = new Date(now)
+  tomorrow.setDate(now.getDate() + 1)
+  return (
+    start.getFullYear() === tomorrow.getFullYear() &&
+    start.getMonth() === tomorrow.getMonth() &&
+    start.getDate() === tomorrow.getDate()
+  )
+}
+
+/** Weekend in Qatar = Friday & Saturday, within the coming week. */
+export function isWeekend(event, now = new Date()) {
+  const start = new Date(event.startsAt)
+  const day = start.getDay() // 5 = Friday, 6 = Saturday
+  if (day !== 5 && day !== 6) return false
+  const weekAhead = new Date(now.getTime() + 7 * 86400000)
+  return start <= weekAhead
+}
+
 /** "Starts in 2h 15m" / "Started 20m ago" — shown when within 24h. */
 export function formatCountdown(iso, now = new Date()) {
   const diff = new Date(iso).getTime() - now.getTime()

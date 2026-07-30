@@ -11,10 +11,12 @@ import { useAuthStore } from '@/stores/authStore'
 import { useChatStore } from '@/stores/chatStore'
 import { useFollowStore } from '@/stores/followStore'
 import { categoryOf } from '@/config/categories'
-import { formatWhen, formatDuration, formatCountdown, formatTime, isLive } from '@/utils/datetime'
+import { formatWhen, formatDuration, formatCountdown, formatTime, isLive, hasEnded } from '@/utils/datetime'
 import { googleCalendarUrl, icsDataUrl } from '@/utils/calendar'
 import { distanceKm, formatDistance } from '@/utils/geo'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
+import CheckoutModal from '@/components/events/CheckoutModal.vue'
+import HostRequestsPanel from '@/components/events/HostRequestsPanel.vue'
 
 const props = defineProps({
   event: { type: Object, required: true }
@@ -35,6 +37,11 @@ const showCalendar = ref(false)
 const chatOpen = ref(false)
 const chatDraft = ref('')
 const chatBody = ref(null)
+const showCheckout = ref(false)
+const showRequests = ref(false)
+const showAttendance = ref(false)
+const showedUp = ref([]) // guest ids ticked as present in the attendance panel
+const exactCoords = ref(null) // unlocked coords for blurred-location events
 
 const category = computed(() => categoryOf(props.event.category))
 const live = computed(() => isLive(props.event))
@@ -47,7 +54,57 @@ const isHost = computed(() => props.event.hostId === meId.value)
 const isAttending = computed(() => props.event.attendeeIds.includes(meId.value))
 const isWaitlisted = computed(() => eventStore.isWaitlisted(props.event, meId.value))
 const waitlistPos = computed(() => eventStore.waitlistPosition(props.event, meId.value))
+const isRequested = computed(() => eventStore.isRequested(props.event, meId.value))
 const canChat = computed(() => isHost.value || isAttending.value || isWaitlisted.value)
+
+const ended = computed(() => hasEnded(props.event))
+const isPaid = computed(() => Number(props.event.pricePerSpot) > 0)
+const priceAmount = computed(() => Number(props.event.pricePerSpot).toFixed(0))
+const requestCount = computed(() => (props.event.requestedIds || []).length)
+
+const myPayment = computed(() =>
+  meId.value ? eventStore.paymentFor(props.event, meId.value) : null
+)
+const spotGuaranteed = computed(
+  () =>
+    !!myPayment.value &&
+    ['held_in_escrow', 'released'].includes(myPayment.value.status)
+)
+
+function guestPaid(id) {
+  const p = eventStore.paymentFor(props.event, id)
+  return !!p && ['held_in_escrow', 'released'].includes(p.status)
+}
+
+const joinLabel = computed(() => {
+  if (props.event.approvalMode) {
+    return isPaid.value ? `🙋 Request to join · QAR ${priceAmount.value}` : '🙋 Request to join'
+  }
+  if (full.value) return 'Join waitlist'
+  return isPaid.value ? `Reserve spot · QAR ${priceAmount.value}` : 'Join · RSVP'
+})
+
+/* --- blurred location ----------------------------------------------------- */
+
+const entitledToExact = computed(() => isHost.value || isAttending.value)
+const showDirections = computed(
+  () => !props.event.locationBlurred || (entitledToExact.value && !!exactCoords.value)
+)
+
+watch(
+  [() => props.event.id, entitledToExact],
+  async ([id, entitled]) => {
+    exactCoords.value = null
+    if (entitled && props.event.locationBlurred) {
+      try {
+        exactCoords.value = await eventStore.fetchExactLocation(id)
+      } catch {
+        /* keep approximate coords */
+      }
+    }
+  },
+  { immediate: true }
+)
 
 const host = computed(
   () =>
@@ -81,15 +138,23 @@ const shareUrl = computed(
   () => `${location.origin}${location.pathname}#/e/${props.event.id}`
 )
 
-const directionsUrl = computed(
-  () =>
-    `https://www.google.com/maps/dir/?api=1&destination=${props.event.lat},${props.event.lng}`
-)
+const directionsUrl = computed(() => {
+  const to = exactCoords.value || { lat: props.event.lat, lng: props.event.lng }
+  return `https://www.google.com/maps/dir/?api=1&destination=${to.lat},${to.lng}`
+})
 
-const whatsappUrl = computed(
-  () =>
-    `https://wa.me/?text=${encodeURIComponent(`${props.event.title} — ${formatWhen(props.event.startsAt)} 📍 ${props.event.locationName}\n${shareUrl.value}`)}`
-)
+// Rich WhatsApp share card — bold title, when, host, urgency, deep link.
+const whatsappUrl = computed(() => {
+  const lines = [
+    `🇶🇦 *${props.event.title}* @ ${props.event.locationName}`,
+    `📅 ${formatWhen(props.event.startsAt)} (${formatDuration(props.event.durationMinutes)})`,
+    `👤 Hosted by ${host.value.name}`,
+    `🎟️ ${spotsLeft.value} spot${spotsLeft.value === 1 ? '' : 's'} remaining!`,
+    '',
+    `👉 Lock in your spot on WYN: ${shareUrl.value}`
+  ]
+  return `https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`
+})
 
 const googleUrl = computed(() => googleCalendarUrl(props.event, shareUrl.value))
 const icsUrl = computed(() => icsDataUrl(props.event, shareUrl.value))
@@ -116,11 +181,40 @@ async function toggleRsvp() {
   busy.value = true
   error.value = ''
   try {
-    if (isAttending.value || isWaitlisted.value) {
+    if (isAttending.value || isWaitlisted.value || isRequested.value) {
       await eventStore.cancelRsvp(props.event.id, meId.value)
+    } else if (isPaid.value) {
+      // Paid events go through the (simulated) escrow checkout first
+      showCheckout.value = true
     } else {
       await eventStore.smartJoin(props.event.id, meId.value)
     }
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    busy.value = false
+  }
+}
+
+/* --- attendance (host, after the event ends) ------------------------------ */
+
+function toggleAttendance() {
+  if (!showAttendance.value) {
+    // Everyone starts ticked as "showed up" — untick the flakes.
+    showedUp.value = props.event.attendeeIds.filter((id) => id !== meId.value)
+  }
+  showAttendance.value = !showAttendance.value
+}
+
+async function saveAttendance() {
+  busy.value = true
+  error.value = ''
+  try {
+    const noShows = props.event.attendeeIds.filter(
+      (id) => id !== meId.value && !showedUp.value.includes(id)
+    )
+    await eventStore.markAttendance(props.event.id, meId.value, noShows)
+    showAttendance.value = false
   } catch (e) {
     error.value = e.message
   } finally {
@@ -239,14 +333,50 @@ onBeforeUnmount(() => chatStore.close())
         &nbsp;·&nbsp; ⏳ {{ formatDuration(event.durationMinutes)
         }}<template v-if="distanceText"> &nbsp;·&nbsp; 📏 {{ distanceText }}</template>
       </p>
+      <div
+        v-if="isPaid || event.ladiesOnly || event.approvalMode || event.minReliability"
+        class="event-card__chips"
+      >
+        <span v-if="isPaid" class="event-card__chip event-card__chip--gold">
+          🎟 QAR {{ priceAmount }} / spot
+        </span>
+        <span v-if="event.ladiesOnly" class="event-card__chip event-card__chip--ladies">
+          🚺 Ladies only
+        </span>
+        <span v-if="event.approvalMode" class="event-card__chip">✋ Host approval</span>
+        <span v-if="event.minReliability" class="event-card__chip">
+          ⭐ {{ event.minReliability }}%+ reliability
+        </span>
+      </div>
     </header>
 
     <p class="event-card__description">{{ event.description }}</p>
 
+    <p v-if="event.locationBlurred && !entitledToExact" class="event-card__blur-note">
+      📍 Approximate area shown — the exact spot unlocks once you're on the guestlist.
+    </p>
+    <p
+      v-else-if="event.locationBlurred && entitledToExact"
+      class="event-card__blur-note event-card__blur-note--ok"
+    >
+      📍 Exact location unlocked for you.
+    </p>
+
     <div class="event-card__share-row">
       <button class="event-card__mini" @click="share">🔗 {{ shareLabel }}</button>
       <a class="event-card__mini" :href="whatsappUrl" target="_blank" rel="noopener">💬 WhatsApp</a>
-      <a class="event-card__mini" :href="directionsUrl" target="_blank" rel="noopener">🧭 Directions</a>
+      <a
+        v-if="showDirections"
+        class="event-card__mini"
+        :href="directionsUrl"
+        target="_blank"
+        rel="noopener"
+      >🧭 Directions</a>
+      <span
+        v-else
+        class="event-card__mini event-card__mini--locked"
+        title="Exact location unlocks once you're on the guestlist"
+      >🔒 Directions</span>
       <button class="event-card__mini" @click="showCalendar = !showCalendar">📅 Calendar</button>
     </div>
 
@@ -296,10 +426,12 @@ onBeforeUnmount(() => chatStore.close())
         <RouterLink
           v-for="guest in guests"
           :key="guest.id"
+          class="event-card__avatar-wrap"
           :to="{ name: 'profile', params: { id: guest.id } }"
-          :title="guest.name"
+          :title="guestPaid(guest.id) ? `${guest.name} · 💳 Spot guaranteed` : guest.name"
         >
           <MemberAvatar :member="guest" :size="30" />
+          <span v-if="guestPaid(guest.id)" class="event-card__paid-dot">💳</span>
         </RouterLink>
       </div>
     </section>
@@ -350,6 +482,9 @@ onBeforeUnmount(() => chatStore.close())
 
     <footer class="event-card__actions">
       <template v-if="!isHost">
+        <p v-if="isAttending && spotGuaranteed" class="event-card__guaranteed">
+          💳 Spot guaranteed — payment held in escrow
+        </p>
         <button
           v-if="isAttending"
           class="btn-primary event-card__join"
@@ -357,6 +492,14 @@ onBeforeUnmount(() => chatStore.close())
           @click="toggleRsvp"
         >
           ✓ Going — tap to cancel
+        </button>
+        <button
+          v-else-if="isRequested"
+          class="btn-ghost event-card__join event-card__join--pending"
+          :disabled="busy"
+          @click="toggleRsvp"
+        >
+          📨 Request pending — tap to withdraw
         </button>
         <button
           v-else-if="isWaitlisted"
@@ -367,16 +510,61 @@ onBeforeUnmount(() => chatStore.close())
           ⏳ On waitlist · #{{ waitlistPos }} — tap to leave
         </button>
         <button
+          v-else-if="isPaid && full && !event.approvalMode"
+          class="btn-ghost event-card__join"
+          disabled
+        >
+          Event full
+        </button>
+        <button
           v-else
           class="btn-primary event-card__join"
           :disabled="busy"
           @click="toggleRsvp"
         >
-          {{ full ? 'Join waitlist' : 'Join · RSVP' }}
+          {{ joinLabel }}
         </button>
       </template>
       <template v-else>
         <div class="event-card__hosting">You're hosting this event 🎉</div>
+        <button
+          v-if="event.approvalMode && !ended"
+          class="btn-primary event-card__requests-btn"
+          @click="showRequests = true"
+        >
+          🙋 Join requests ({{ requestCount }})
+        </button>
+        <div v-if="ended && event.attendeeIds.length > 1" class="event-card__attendance">
+          <p v-if="event.attendanceRecorded" class="event-card__attendance-done">
+            ✅ Attendance recorded — reliability scores updated
+          </p>
+          <template v-else>
+            <button class="btn-ghost event-card__attendance-toggle" @click="toggleAttendance">
+              ✅ Mark attendance {{ showAttendance ? '▾' : '▸' }}
+            </button>
+            <div v-if="showAttendance" class="event-card__attendance-list">
+              <p class="event-card__attendance-hint">
+                Untick anyone who didn't show up — this updates their reliability score.
+              </p>
+              <label
+                v-for="guest in guests.filter((g) => g.id !== meId)"
+                :key="guest.id"
+                class="event-card__attendance-row"
+              >
+                <input v-model="showedUp" type="checkbox" :value="guest.id" />
+                <MemberAvatar :member="guest" :size="26" />
+                <span>{{ guest.name }}</span>
+              </label>
+              <button
+                class="btn-primary event-card__attendance-save"
+                :disabled="busy"
+                @click="saveAttendance"
+              >
+                Save attendance
+              </button>
+            </div>
+          </template>
+        </div>
         <div class="event-card__host-actions">
           <button class="btn-ghost" :disabled="busy" @click="emit('edit', event)">
             ✏️ Edit details
@@ -393,6 +581,14 @@ onBeforeUnmount(() => chatStore.close())
       </template>
     </footer>
   </article>
+
+  <CheckoutModal
+    v-if="showCheckout"
+    :event="event"
+    @close="showCheckout = false"
+    @paid="showCheckout = false"
+  />
+  <HostRequestsPanel v-if="showRequests" :event="event" @close="showRequests = false" />
 </template>
 
 <style scoped>
@@ -479,6 +675,52 @@ onBeforeUnmount(() => chatStore.close())
   line-height: 1.5;
 }
 
+.event-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.event-card__chip {
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.event-card__chip--gold {
+  background: rgba(212, 175, 106, 0.14);
+  border-color: rgba(212, 175, 106, 0.4);
+  color: var(--gold);
+}
+
+.event-card__chip--ladies {
+  background: rgba(244, 114, 182, 0.14);
+  border-color: rgba(244, 114, 182, 0.45);
+  color: #f9a8d4;
+}
+
+.event-card__blur-note {
+  margin-top: 12px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px dashed rgba(56, 189, 248, 0.4);
+  color: #7dd3fc;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.event-card__blur-note--ok {
+  background: rgba(45, 212, 160, 0.1);
+  border-color: rgba(45, 212, 160, 0.4);
+  color: var(--success);
+}
+
 .event-card__description {
   margin-top: 14px;
   font-size: 14px;
@@ -538,6 +780,15 @@ onBeforeUnmount(() => chatStore.close())
 
 .event-card__mini:hover {
   background: rgba(255, 255, 255, 0.13);
+}
+
+.event-card__mini--locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.event-card__mini--locked:hover {
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .event-card__host {
@@ -605,6 +856,20 @@ onBeforeUnmount(() => chatStore.close())
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 12px;
+}
+
+.event-card__avatar-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.event-card__paid-dot {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  font-size: 10px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
 }
 
 /* Chat --------------------------------------------------------------------- */
@@ -728,6 +993,81 @@ onBeforeUnmount(() => chatStore.close())
 
 .event-card__join {
   width: 100%;
+}
+
+.event-card__join--pending {
+  color: var(--gold);
+  border-color: rgba(212, 175, 106, 0.45);
+  background: rgba(212, 175, 106, 0.1);
+}
+
+.event-card__guaranteed {
+  margin-bottom: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(45, 212, 160, 0.1);
+  border: 1px solid rgba(45, 212, 160, 0.35);
+  color: var(--success);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.event-card__requests-btn {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.event-card__attendance {
+  margin-top: 10px;
+}
+
+.event-card__attendance-toggle {
+  width: 100%;
+}
+
+.event-card__attendance-done {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(45, 212, 160, 0.1);
+  color: var(--success);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.event-card__attendance-list {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.event-card__attendance-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin-bottom: 10px;
+}
+
+.event-card__attendance-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 0;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.event-card__attendance-row input {
+  accent-color: var(--success);
+  width: 16px;
+  height: 16px;
+}
+
+.event-card__attendance-save {
+  width: 100%;
+  margin-top: 10px;
 }
 
 .event-card__hosting {

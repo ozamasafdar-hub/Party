@@ -7,12 +7,12 @@ import { nextHalfHourISO } from '@/utils/datetime'
  */
 
 export const SEED_MEMBERS = [
-  { id: 'u-noora', name: 'Noora Al-Thani', avatarColor: '#c62d55', initials: 'NA' },
-  { id: 'u-hassan', name: 'Hassan Karim', avatarColor: '#38bdf8', initials: 'HK' },
-  { id: 'u-mariam', name: 'Mariam Saleh', avatarColor: '#2dd4a0', initials: 'MS' },
-  { id: 'u-omar', name: 'Omar Farouk', avatarColor: '#a78bfa', initials: 'OF' },
-  { id: 'u-layla', name: 'Layla Ahmed', avatarColor: '#fbbf6e', initials: 'LA' },
-  { id: 'u-yousef', name: 'Yousef Mansour', avatarColor: '#fb7185', initials: 'YM' }
+  { id: 'u-noora', name: 'Noora Al-Thani', avatarColor: '#c62d55', initials: 'NA', gender: 'female', reliability: 98, attended: 41, flaked: 1 },
+  { id: 'u-hassan', name: 'Hassan Karim', avatarColor: '#38bdf8', initials: 'HK', gender: 'male', reliability: 92, attended: 24, flaked: 2 },
+  { id: 'u-mariam', name: 'Mariam Saleh', avatarColor: '#2dd4a0', initials: 'MS', gender: 'female', reliability: 100, attended: 18, flaked: 0 },
+  { id: 'u-omar', name: 'Omar Farouk', avatarColor: '#a78bfa', initials: 'OF', gender: 'male', reliability: 78, attended: 14, flaked: 4 },
+  { id: 'u-layla', name: 'Layla Ahmed', avatarColor: '#fbbf6e', initials: 'LA', gender: 'female', reliability: 95, attended: 20, flaked: 1 },
+  { id: 'u-yousef', name: 'Yousef Mansour', avatarColor: '#fb7185', initials: 'YM', gender: 'male', reliability: 88, attended: 15, flaked: 2 }
 ]
 
 function at(hoursFromNow, minutes = 0) {
@@ -165,5 +165,43 @@ export const SEED_EVENTS = [
     durationMinutes: 60,
     maxCapacity: 15,
     attendeeIds: ['u-hassan', 'u-layla']
+  },
+  {
+    id: 'e-brunch',
+    hostId: 'u-noora',
+    title: 'Ladies brunch at Nobu',
+    description:
+      'Girls-only brunch with a view over the bay. Dress code: fancy-ish 💅',
+    category: 'dining',
+    locationName: 'Nobu, Four Seasons Doha',
+    lat: 25.3316,
+    lng: 51.5457,
+    startsAt: at(18),
+    durationMinutes: 150,
+    maxCapacity: 8,
+    attendeeIds: ['u-noora', 'u-mariam'],
+    ladiesOnly: true
+  },
+  {
+    id: 'e-majlis',
+    hostId: 'u-omar',
+    title: 'Private majlis game night',
+    description:
+      'Cards, karak, and PlayStation at my family majlis. Small trusted group — request to join and I\'ll approve. QR 50 covers food.',
+    category: 'culture',
+    locationName: 'Private majlis, Al Duhail',
+    lat: 25.3721, // blurred position shown publicly
+    lng: 51.478,
+    exactLat: 25.3702,
+    exactLng: 51.4756,
+    startsAt: at(22),
+    durationMinutes: 240,
+    maxCapacity: 10,
+    attendeeIds: ['u-omar', 'u-hassan'],
+    approvalMode: true,
+    minReliability: 85,
+    pricePerSpot: 50,
+    locationBlurred: true,
+    requestedIds: ['u-yousef']
   }
 ]
