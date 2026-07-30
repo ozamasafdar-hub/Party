@@ -17,6 +17,8 @@ import { distanceKm, formatDistance } from '@/utils/geo'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
 import CheckoutModal from '@/components/events/CheckoutModal.vue'
 import HostRequestsPanel from '@/components/events/HostRequestsPanel.vue'
+import HostProModal from '@/components/pro/HostProModal.vue'
+import { useHostPermissions } from '@/composables/useHostPermissions'
 
 const props = defineProps({
   event: { type: Object, required: true }
@@ -37,6 +39,8 @@ const showCalendar = ref(false)
 const chatOpen = ref(false)
 const chatDraft = ref('')
 const chatBody = ref(null)
+const { canBroadcast } = useHostPermissions()
+const showProModal = ref(false)
 const showCheckout = ref(false)
 const showRequests = ref(false)
 const showAttendance = ref(false)
@@ -167,6 +171,17 @@ const whatsappUrl = computed(() => {
 
 const googleUrl = computed(() => googleCalendarUrl(props.event, shareUrl.value))
 const icsUrl = computed(() => icsDataUrl(props.event, shareUrl.value))
+
+// Host Pro perk: 1-click WhatsApp update ready to forward to the group
+const broadcastUrl = computed(() => {
+  const lines = [
+    `📣 *Update from your host — ${props.event.title}*`,
+    `📍 ${props.event.locationName} · 📅 ${formatWhen(props.event.startsAt)}`,
+    '',
+    `🎟 Details & guestlist: ${shareUrl.value}`
+  ]
+  return `https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`
+})
 
 const distanceText = computed(() => {
   const here = eventStore.userLocation
@@ -361,9 +376,15 @@ onBeforeUnmount(() => chatStore.close())
         }}<template v-if="distanceText"> &nbsp;·&nbsp; 📏 {{ distanceText }}</template>
       </p>
       <div
-        v-if="isPaid || event.ladiesOnly || event.approvalMode || event.minReliability"
+        v-if="isPaid || event.ladiesOnly || event.approvalMode || event.minReliability || event.featuredPin || event.isProEvent"
         class="event-card__chips"
       >
+        <span v-if="event.featuredPin" class="event-card__chip event-card__chip--gold">
+          ✨ Featured
+        </span>
+        <span v-else-if="event.isProEvent" class="event-card__chip event-card__chip--gold">
+          👑 Pro host
+        </span>
         <span v-if="isPaid" class="event-card__chip event-card__chip--gold">
           🎟 QAR {{ priceAmount }} / spot
         </span>
@@ -561,6 +582,22 @@ onBeforeUnmount(() => chatStore.close())
         >
           🙋 Join requests ({{ requestCount }})
         </button>
+        <a
+          v-if="!ended && canBroadcast"
+          class="btn-ghost event-card__broadcast"
+          :href="broadcastUrl"
+          target="_blank"
+          rel="noopener"
+        >
+          📣 WhatsApp blast to guests
+        </a>
+        <button
+          v-else-if="!ended"
+          class="btn-ghost event-card__broadcast"
+          @click="showProModal = true"
+        >
+          📣 WhatsApp blast 🔒
+        </button>
         <div v-if="ended && event.attendeeIds.length > 1" class="event-card__attendance">
           <p v-if="event.attendanceRecorded" class="event-card__attendance-done">
             ✅ Attendance recorded — reliability scores updated
@@ -616,6 +653,11 @@ onBeforeUnmount(() => chatStore.close())
     @paid="showCheckout = false"
   />
   <HostRequestsPanel v-if="showRequests" :event="event" @close="showRequests = false" />
+  <HostProModal
+    v-if="showProModal"
+    reason="WhatsApp blasts to your guests are a Host Pro perk."
+    @close="showProModal = false"
+  />
 </template>
 
 <style scoped>
@@ -1083,6 +1125,15 @@ onBeforeUnmount(() => chatStore.close())
 .event-card__requests-btn {
   width: 100%;
   margin-top: 10px;
+}
+
+.event-card__broadcast {
+  display: flex;
+  width: 100%;
+  margin-top: 10px;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
 }
 
 .event-card__attendance {

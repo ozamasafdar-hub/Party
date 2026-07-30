@@ -18,6 +18,8 @@ import LoginPanel from '@/components/auth/LoginPanel.vue'
 import MapStyleControl from '@/components/map/MapStyleControl.vue'
 import MapSearchBar from '@/components/map/MapSearchBar.vue'
 import TimePills from '@/components/map/TimePills.vue'
+import HostProModal from '@/components/pro/HostProModal.vue'
+import { useHostPermissions } from '@/composables/useHostPermissions'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useNotifStore } from '@/stores/notifStore'
@@ -133,10 +135,18 @@ function onSelect(eventId) {
   eventStore.select(eventId)
 }
 
+const { createBlockReason } = useHostPermissions()
+const showProModal = ref(false)
+
 /** Form first — the location is picked from inside it. */
 function openCreate() {
   if (!authStore.isAuthenticated) {
     openLogin('Sign in to host your own event on the map.', { create: true })
+    return
+  }
+  // Free-tier limit reached → paywall instead of the form
+  if (createBlockReason.value) {
+    showProModal.value = true
     return
   }
   eventStore.clearSelection()
@@ -322,10 +332,26 @@ function toggleList() {
         </div>
       </Transition>
       <TimePills v-if="!pickMode && !pickingLocation && !selectedEvent && !showList" />
-      <button v-if="!pickMode && !showCreateModal" class="btn-primary map-view__fab" @click="openCreate">
-        ＋ Create an event
+      <button
+        v-if="!pickMode && !showCreateModal"
+        class="btn-primary map-view__fab"
+        :class="{ 'map-view__fab--limited': createBlockReason }"
+        :title="createBlockReason || 'Create an event'"
+        @click="openCreate"
+      >
+        {{ createBlockReason ? '🔒 Create an event' : '＋ Create an event' }}
       </button>
     </div>
+
+    <!-- Host Pro paywall (free-tier limit reached) -->
+    <Transition name="fade">
+      <HostProModal
+        v-if="showProModal"
+        :reason="createBlockReason"
+        @close="showProModal = false"
+        @upgraded="showProModal = false"
+      />
+    </Transition>
 
     <!-- What's on feed -->
     <Transition name="slide-up">
@@ -419,6 +445,11 @@ function toggleList() {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+}
+
+.map-view__fab--limited {
+  filter: saturate(0.55);
+  opacity: 0.85;
 }
 
 .map-view__fab {

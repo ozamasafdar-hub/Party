@@ -13,6 +13,7 @@ import { categoryOf } from '@/config/categories'
 import { formatWhen } from '@/utils/datetime'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
 import EditProfileModal from '@/components/profile/EditProfileModal.vue'
+import HostProModal from '@/components/pro/HostProModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -35,7 +36,9 @@ const attended = computed(() => eventStore.attendedBy(viewedId.value))
 const following = computed(() => followStore.isFollowing(viewedId.value))
 
 const showEdit = ref(false)
+const showPro = ref(false)
 const followBusy = ref(false)
+const isProMember = computed(() => member.value?.subscriptionTier === 'host_pro')
 
 onMounted(async () => {
   if (!eventStore.events.length) eventStore.load()
@@ -73,7 +76,10 @@ function logout() {
         <header class="profile__header glass-panel">
           <MemberAvatar :member="member" :size="72" />
           <div class="profile__identity">
-            <h1 class="profile__name">{{ member.name }}</h1>
+            <h1 class="profile__name">
+              {{ member.name }}
+              <span v-if="isProMember" class="profile__pro-badge">👑 Host Pro</span>
+            </h1>
             <p v-if="member.bio" class="profile__bio">{{ member.bio }}</p>
             <p class="profile__reliability">
               ⭐ {{ member.reliability ?? 100 }}% reliable · {{ member.attended ?? 0 }} attended
@@ -86,6 +92,13 @@ function logout() {
           <div class="profile__actions">
             <template v-if="isSelf">
               <button class="btn-ghost profile__edit" @click="showEdit = true">✏️ Edit profile</button>
+              <button
+                v-if="!isProMember"
+                class="btn-primary profile__upgrade"
+                @click="showPro = true"
+              >
+                👑 Go Host Pro
+              </button>
               <button class="btn-ghost profile__logout" @click="logout">Sign out</button>
             </template>
             <button
@@ -140,6 +153,10 @@ function logout() {
         @saved="showEdit = false"
       />
     </Transition>
+
+    <Transition name="fade">
+      <HostProModal v-if="showPro" @close="showPro = false" @upgraded="showPro = false" />
+    </Transition>
   </div>
 </template>
 
@@ -191,6 +208,25 @@ function logout() {
   font-size: 13px;
   font-weight: 700;
   color: var(--gold);
+}
+
+.profile__pro-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  vertical-align: 4px;
+  background: rgba(212, 175, 106, 0.16);
+  border: 1px solid rgba(212, 175, 106, 0.45);
+  color: var(--gold);
+}
+
+.profile__upgrade {
+  padding: 9px 16px;
+  font-size: 13px;
 }
 
 .profile__stats {

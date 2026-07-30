@@ -13,6 +13,8 @@ import { resizeCoverFile } from '@/utils/image'
 import { blurCoords } from '@/utils/geo'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useHostPermissions, FREE_LIMITS } from '@/composables/useHostPermissions'
+import HostProModal from '@/components/pro/HostProModal.vue'
 
 const props = defineProps({
   coords: { type: Object, default: null }, // { lat, lng } — freshly picked
@@ -40,17 +42,60 @@ const form = reactive({
   locationName: props.event?.locationName ?? '',
   startsAtLocal: toLocalInputValue(props.event?.startsAt ?? nextHalfHourISO()),
   durationMinutes: props.event?.durationMinutes ?? 120,
-  maxCapacity: props.event?.maxCapacity ?? 6,
+  maxCapacity: props.event?.maxCapacity ?? 5, // free-tier friendly default
   approvalMode: props.event?.approvalMode ?? false,
   minReliabilityOn: !!props.event?.minReliability,
   minReliability: props.event?.minReliability ?? 80,
   pricePerSpot: props.event?.pricePerSpot || '',
   ladiesOnly: props.event?.ladiesOnly ?? false,
-  locationBlurred: props.event?.locationBlurred ?? false
+  locationBlurred: props.event?.locationBlurred ?? false,
+  featuredPin: props.event?.featuredPin ?? false
 })
 
 const busy = ref(false)
 const error = ref('')
+
+/* --- Host Pro gates ------------------------------------------------------- */
+
+const { isPro, maxCapacity, canCharge, canFeaturePin, canReliabilityLock } =
+  useHostPermissions()
+const showPaywall = ref(false)
+const paywallReason = ref('')
+
+function openPaywall(reason) {
+  paywallReason.value = reason
+  showPaywall.value = true
+}
+
+/**
+ * Intercepts a pro-only toggle for free hosts: block + show the paywall.
+ * `allowed` arrives as a plain boolean (template refs auto-unwrap).
+ */
+function gatePro(event, allowed, reason) {
+  if (allowed) return
+  event.preventDefault()
+  openPaywall(reason)
+}
+
+watch(
+  () => form.maxCapacity,
+  (v) => {
+    if (!isPro.value && Number(v) > FREE_LIMITS.maxCapacity) {
+      form.maxCapacity = FREE_LIMITS.maxCapacity
+      openPaywall(`Free events are capped at ${FREE_LIMITS.maxCapacity} guests.`)
+    }
+  }
+)
+
+watch(
+  () => form.pricePerSpot,
+  (v) => {
+    if (!canCharge.value && Number(v) > 0) {
+      form.pricePerSpot = ''
+      openPaywall('Charging per spot is a Host Pro feature.')
+    }
+  }
+)
 
 // A searched place suggests the name — but never overwrites what the
 // member already typed
@@ -141,7 +186,8 @@ async function submit() {
     ladiesOnly: form.ladiesOnly,
     locationBlurred: blur || (isEditing.value && !!props.event?.locationBlurred),
     exactLat: blur ? pin.value.lat : null,
-    exactLng: blur ? pin.value.lng : null
+    exactLng: blur ? pin.value.lng : null,
+    featuredPin: form.featuredPin && isPro.value
   }
 
   busy.value = true
@@ -272,9 +318,25 @@ async function submit() {
         </div>
         <div>
           <label class="field-label" for="ev-cap">Max guests</label>
-          <input id="ev-cap" v-model.number="form.maxCapacity" class="field-input" type="number" min="2" max="100" />
+          <input
+            id="ev-cap"
+            v-model.number="form.maxCapacity"
+            class="field-input"
+            type="number"
+            min="2"
+            :max="maxCapacity"
+          />
         </div>
       </div>
+
+      <button
+        v-if="!isPro"
+        type="button"
+        class="create-modal__cap-badge"
+        @click="openPaywall(`Free events are capped at ${FREE_LIMITS.maxCapacity} guests.`)"
+      >
+        🔒 Up to {{ FREE_LIMITS.maxCapacity }} guests on the free plan — upgrade to Host Pro to expand
+      </button>
 
       <label class="field-label">Host controls</label>
       <div class="create-modal__extras">
@@ -287,9 +349,13 @@ async function submit() {
         </label>
 
         <label class="create-modal__toggle">
-          <input v-model="form.minReliabilityOn" type="checkbox" />
+          <input
+            v-model="form.minReliabilityOn"
+            type="checkbox"
+            @click="gatePro($event, canReliabilityLock, 'Reliability locks are a Host Pro feature.')"
+          />
           <span>
-            <strong>⭐ Minimum reliability</strong>
+            <strong>⭐ Minimum reliability <em v-if="!isPro" class="create-modal__pro-tag">👑 PRO</em></strong>
             <em>Only members with a good show-up record can join.</em>
           </span>
         </label>
@@ -307,7 +373,7 @@ async function submit() {
 
         <label class="create-modal__toggle">
           <span class="create-modal__price-label">
-            <strong>💳 Cost per person (QAR)</strong>
+            <strong>💳 Cost per person (QAR) <em v-if="!isPro" class="create-modal__pro-tag">👑 PRO</em></strong>
             <em>Guests pay upfront into escrow — no more no-shows. 0 = free.</em>
           </span>
           <input
@@ -319,6 +385,18 @@ async function submit() {
             placeholder="0"
             class="field-input create-modal__price-input"
           />
+        </label>
+
+        <label class="create-modal__toggle">
+          <input
+            v-model="form.featuredPin"
+            type="checkbox"
+            @click="gatePro($event, canFeaturePin, 'Featured glowing pins are a Host Pro perk.')"
+          />
+          <span>
+            <strong>✨ Featured pin <em v-if="!isPro" class="create-modal__pro-tag">👑 PRO</em></strong>
+            <em>Your pin glows gold on the map so it stands out to everyone.</em>
+          </span>
         </label>
 
         <label class="create-modal__toggle">
@@ -347,6 +425,14 @@ async function submit() {
         </button>
       </div>
     </form>
+
+    <!-- Inside the root so the parent's v-show (pick-location flow) keeps
+         working — this component must stay single-rooted. -->
+    <HostProModal
+      v-if="showPaywall"
+      :reason="paywallReason"
+      @close="showPaywall = false"
+    />
   </div>
 </template>
 
@@ -575,6 +661,39 @@ async function submit() {
   flex-shrink: 0;
   padding: 8px 10px;
   text-align: right;
+}
+
+.create-modal__cap-badge {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(212, 175, 106, 0.1);
+  border: 1px dashed rgba(212, 175, 106, 0.4);
+  color: var(--gold);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.create-modal__cap-badge:hover {
+  background: rgba(212, 175, 106, 0.16);
+}
+
+.create-modal__pro-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  background: rgba(212, 175, 106, 0.18);
+  border: 1px solid rgba(212, 175, 106, 0.45);
+  color: var(--gold);
+  vertical-align: 1px;
 }
 
 .create-modal__error {

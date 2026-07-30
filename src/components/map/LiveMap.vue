@@ -203,7 +203,13 @@ function renderMarkers(events) {
     if (existing) {
       existing.setLatLng([event.lat, event.lng])
       // Only rebuild the icon when something it displays actually changed
-      const signature = JSON.stringify([state, event.attendeeIds.length, event.category])
+      const signature = JSON.stringify([
+        state,
+        event.attendeeIds.length,
+        event.category,
+        event.featuredPin,
+        event.ladiesOnly
+      ])
       if (existing._pinSignature !== signature) {
         existing.setIcon(buildEventIcon(event, state))
         existing._pinSignature = signature

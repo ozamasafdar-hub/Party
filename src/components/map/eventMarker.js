@@ -19,10 +19,11 @@ export function buildEventIcon(
   { live = false, full = false, selected = false, friend = false } = {}
 ) {
   const { color, glyph } = categoryOf(event.category)
+  const featured = !!event.featuredPin
   const badgeColor = full ? '#f4587a' : '#2dd4a0'
   const count = event.attendeeIds.length
-  const stroke = selected ? '#ffffff' : friend ? '#d4af6a' : 'rgba(255,255,255,0.85)'
-  const strokeWidth = selected ? 3 : friend ? 2.5 : 1.5
+  const stroke = selected ? '#ffffff' : featured ? '#f4d78f' : friend ? '#d4af6a' : 'rgba(255,255,255,0.85)'
+  const strokeWidth = selected ? 3 : featured ? 3 : friend ? 2.5 : 1.5
 
   const pulse = live
     ? `<span class="event-pin__pulse" style="
@@ -40,7 +41,24 @@ export function buildEventIcon(
       </g>`
     : ''
 
+  // Host Pro featured pins: golden glow ring + star badge
+  const featuredGlow = featured
+    ? `<span class="event-pin__glow" style="
+         position:absolute; left:50%; top:20px; width:40px; height:40px;
+         margin-left:-20px; margin-top:-20px; border-radius:50%;
+         pointer-events:none;"></span>`
+    : ''
+  const star = featured
+    ? `<g>
+        <circle cx="${event.ladiesOnly ? 8 : 8}" cy="${event.ladiesOnly ? 30 : 10}" r="9"
+                fill="#d4af6a" stroke="#0b0f19" stroke-width="2"/>
+        <text x="8" y="${event.ladiesOnly ? 33.6 : 13.6}" text-anchor="middle" font-size="10"
+              font-family="Inter, system-ui, sans-serif">⭐</text>
+      </g>`
+    : ''
+
   const html = `
+    ${featuredGlow}
     ${pulse}
     <svg width="${PIN_W}" height="${PIN_H}" viewBox="0 0 46 60"
          xmlns="http://www.w3.org/2000/svg" style="position:relative;display:block">
@@ -58,10 +76,11 @@ export function buildEventIcon(
               font-family="Inter, system-ui, sans-serif" fill="#0b0f19">${full ? '×' : count}</text>
       </g>
       ${ladies}
+      ${star}
     </svg>`
 
   return L.divIcon({
-    className: `event-pin${live ? ' event-pin--live' : ''}`,
+    className: `event-pin${live ? ' event-pin--live' : ''}${featured ? ' event-pin--featured' : ''}`,
     html,
     iconSize: [PIN_W, PIN_H],
     iconAnchor: [PIN_W / 2, PIN_H - 4],

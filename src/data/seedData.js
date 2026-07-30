@@ -7,10 +7,10 @@ import { nextHalfHourISO } from '@/utils/datetime'
  */
 
 export const SEED_MEMBERS = [
-  { id: 'u-noora', name: 'Noora Al-Thani', avatarColor: '#c62d55', initials: 'NA', gender: 'female', reliability: 98, attended: 41, flaked: 1 },
+  { id: 'u-noora', name: 'Noora Al-Thani', avatarColor: '#c62d55', initials: 'NA', gender: 'female', reliability: 98, attended: 41, flaked: 1, subscriptionTier: 'host_pro', subscriptionStatus: 'active' },
   { id: 'u-hassan', name: 'Hassan Karim', avatarColor: '#38bdf8', initials: 'HK', gender: 'male', reliability: 92, attended: 24, flaked: 2 },
   { id: 'u-mariam', name: 'Mariam Saleh', avatarColor: '#2dd4a0', initials: 'MS', gender: 'female', reliability: 100, attended: 18, flaked: 0 },
-  { id: 'u-omar', name: 'Omar Farouk', avatarColor: '#a78bfa', initials: 'OF', gender: 'male', reliability: 78, attended: 14, flaked: 4 },
+  { id: 'u-omar', name: 'Omar Farouk', avatarColor: '#a78bfa', initials: 'OF', gender: 'male', reliability: 78, attended: 14, flaked: 4, subscriptionTier: 'host_pro', subscriptionStatus: 'active' },
   { id: 'u-layla', name: 'Layla Ahmed', avatarColor: '#fbbf6e', initials: 'LA', gender: 'female', reliability: 95, attended: 20, flaked: 1 },
   { id: 'u-yousef', name: 'Yousef Mansour', avatarColor: '#fb7185', initials: 'YM', gender: 'male', reliability: 88, attended: 15, flaked: 2 }
 ]
@@ -74,7 +74,9 @@ export const SEED_EVENTS = [
     startsAt: at(1),
     durationMinutes: 360,
     maxCapacity: 6,
-    attendeeIds: ['u-noora', 'u-layla', 'u-hassan', 'u-yousef', 'u-mariam']
+    attendeeIds: ['u-noora', 'u-layla', 'u-hassan', 'u-yousef', 'u-mariam'],
+    isProEvent: true,
+    featuredPin: true
   },
   {
     id: 'e-golf',
@@ -202,6 +204,7 @@ export const SEED_EVENTS = [
     minReliability: 85,
     pricePerSpot: 50,
     locationBlurred: true,
+    isProEvent: true,
     requestedIds: ['u-yousef']
   }
 ]

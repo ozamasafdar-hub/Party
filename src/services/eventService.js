@@ -54,10 +54,50 @@ function demoUpsertMember(user) {
     gender: user.gender ?? null,
     reliability: existing?.reliability ?? user.reliability ?? 100,
     attended: existing?.attended ?? user.attended ?? 0,
-    flaked: existing?.flaked ?? user.flaked ?? 0
+    flaked: existing?.flaked ?? user.flaked ?? 0,
+    subscriptionTier: user.subscriptionTier ?? existing?.subscriptionTier ?? 'free',
+    subscriptionStatus: user.subscriptionStatus ?? existing?.subscriptionStatus ?? 'none'
   }
   if (i === -1) db.members.push(member)
   else db.members[i] = member
+}
+
+/** Mirrors the enforce_host_tier database trigger for demo mode. */
+function demoGateHostTier(data, host) {
+  const tier =
+    host.subscriptionTier ??
+    db.members.find((m) => m.id === host.id)?.subscriptionTier ??
+    'free'
+  if (tier === 'host_pro') return { isPro: true }
+
+  if (data.maxCapacity > 5) {
+    throw friendly(new Error('FREE_TIER_CAPACITY'))
+  }
+  if ((data.pricePerSpot || 0) > 0) {
+    throw friendly(new Error('FREE_TIER_PAID'))
+  }
+  if (data.minReliability != null) {
+    throw friendly(new Error('FREE_TIER_RELIABILITY'))
+  }
+  const now = new Date()
+  const active = db.events.filter(
+    (e) =>
+      e.hostId === host.id &&
+      !e.cancelled &&
+      new Date(e.startsAt).getTime() + e.durationMinutes * 60000 > now.getTime()
+  )
+  if (active.length >= 1) {
+    throw friendly(new Error('FREE_TIER_PINS'))
+  }
+  const thisMonth = db.events.filter((e) => {
+    if (e.hostId !== host.id) return false
+    const created = new Date(e.createdAt || e.startsAt)
+    return created.getFullYear() === now.getFullYear() && created.getMonth() === now.getMonth()
+  })
+  if (thisMonth.length >= 2) {
+    throw friendly(new Error('FREE_TIER_MONTHLY'))
+  }
+  return { isPro: false }
 }
 
 function demoGateReliability(event, userId) {
@@ -121,9 +161,13 @@ const demo = {
   },
 
   async createEvent(data, host) {
+    const { isPro } = demoGateHostTier(data, host)
     const photos = mergePhotos(data)
     const event = {
       id: `e-${Date.now().toString(36)}`,
+      createdAt: new Date().toISOString(),
+      isProEvent: isPro,
+      featuredPin: isPro && !!data.featuredPin,
       hostId: host.id,
       title: data.title.trim(),
       description: data.description.trim(),
@@ -393,7 +437,9 @@ export function toMember(profile) {
     gender: profile.gender || null,
     reliability: Number(profile.reliability_score ?? 100),
     attended: profile.events_attended ?? 0,
-    flaked: profile.events_flaked ?? 0
+    flaked: profile.events_flaked ?? 0,
+    subscriptionTier: profile.subscription_tier ?? 'free',
+    subscriptionStatus: profile.subscription_status ?? 'none'
   }
 }
 
@@ -422,6 +468,9 @@ function toEvent(row) {
       : row.cover_url
         ? [row.cover_url]
         : [],
+    createdAt: row.created_at || null,
+    isProEvent: !!row.is_pro_event,
+    featuredPin: !!row.is_featured_pin,
     approvalMode: !!row.approval_mode,
     minReliability: row.min_reliability ?? null,
     pricePerSpot: Number(row.price_per_spot || 0),
@@ -454,6 +503,21 @@ function friendly(error) {
   if (/EVENT_FULL/.test(error.message)) return new Error('This event is already full')
   if (/RELIABILITY_TOO_LOW/.test(error.message)) {
     return new Error('This host requires a higher attendance record to join')
+  }
+  if (/FREE_TIER_CAPACITY/.test(error.message)) {
+    return new Error('Free events are capped at 5 guests — upgrade to Host Pro for bigger events')
+  }
+  if (/FREE_TIER_PAID/.test(error.message)) {
+    return new Error('Charging per spot needs Host Pro')
+  }
+  if (/FREE_TIER_RELIABILITY/.test(error.message)) {
+    return new Error('Reliability locks need Host Pro')
+  }
+  if (/FREE_TIER_PINS/.test(error.message)) {
+    return new Error('Free hosts keep 1 live pin on the map — upgrade to Host Pro for unlimited events')
+  }
+  if (/FREE_TIER_MONTHLY/.test(error.message)) {
+    return new Error('Free hosts can create 2 events per month — upgrade to Host Pro for unlimited hosting')
   }
   return new Error(error.message)
 }
@@ -515,21 +579,23 @@ const live = {
       min_reliability: data.minReliability ?? null,
       price_per_spot: data.pricePerSpot || 0,
       is_ladies_only: !!data.ladiesOnly,
-      is_location_blurred: !!data.locationBlurred
+      is_location_blurred: !!data.locationBlurred,
+      // The enforce_host_tier trigger overrides these for free hosts
+      is_featured_pin: !!data.featuredPin
     }
-    let { data: row, error } = await supabase
-      .from('events')
-      .insert(insertPayload)
-      .select(EVENT_SELECT)
-      .single()
-    if (error && /photo_urls/.test(error.message)) {
-      // Database hasn't run migration 004 yet — save with the cover only
-      delete insertPayload.photo_urls
+    // Databases behind on migrations 004/005 report one unknown column per
+    // attempt — strip and retry so older schemas keep working.
+    let row, error
+    for (let attempt = 0; attempt < 3; attempt++) {
       ;({ data: row, error } = await supabase
         .from('events')
         .insert(insertPayload)
         .select(EVENT_SELECT)
         .single())
+      if (!error) break
+      if (/photo_urls/.test(error.message)) delete insertPayload.photo_urls
+      else if (/is_featured_pin/.test(error.message)) delete insertPayload.is_featured_pin
+      else break
     }
     if (error) throw friendly(error)
     // Host always attends their own event

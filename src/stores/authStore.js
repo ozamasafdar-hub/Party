@@ -65,7 +65,9 @@ function makeDemoUser(name) {
     gender: null,
     reliability: 100,
     attended: 0,
-    flaked: 0
+    flaked: 0,
+    subscriptionTier: 'free',
+    subscriptionStatus: 'none'
   }
 }
 
@@ -118,13 +120,17 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async _loadProfile(userId) {
-      const { data } = await supabase
+      const BASE =
+        'id, full_name, avatar_url, bio, gender, reliability_score, events_attended, events_flaked, is_approved'
+      let { data, error } = await supabase
         .from('profiles')
-        .select(
-          'id, full_name, avatar_url, bio, gender, reliability_score, events_attended, events_flaked, is_approved'
-        )
+        .select(`${BASE}, subscription_tier, subscription_status`)
         .eq('id', userId)
         .maybeSingle()
+      if (error && /subscription/.test(error.message)) {
+        // Database hasn't run migration 005 yet — treat everyone as free
+        ;({ data } = await supabase.from('profiles').select(BASE).eq('id', userId).maybeSingle())
+      }
       if (data?.is_approved) this.currentUser = toMember(data)
       return data
     },
@@ -253,6 +259,43 @@ export const useAuthStore = defineStore('auth', {
         bio: cleanBio,
         gender: cleanGender,
         avatarUrl: avatarDataUrl ?? this.currentUser.avatarUrl ?? null
+      }
+      this.currentUser = user
+      storage.set(SESSION_KEY, JSON.stringify(user))
+      upsertDemoMember(user)
+      const accounts = readAccounts()
+      for (const email of Object.keys(accounts)) {
+        if (accounts[email].user?.id === user.id) accounts[email].user = user
+      }
+      storage.set(ACCOUNTS_KEY, JSON.stringify(accounts))
+      return user
+    },
+
+    /**
+     * SIMULATED subscription switch ('free' | 'host_pro') — flips the tier
+     * immediately with no real billing. Swap for a payment provider later.
+     */
+    async setSubscription(tier) {
+      if (!this.currentUser) throw new Error('Sign in first.')
+      if (!['free', 'host_pro'].includes(tier)) throw new Error('Unknown plan.')
+
+      if (isLive) {
+        const { error } = await supabase.rpc('set_subscription', { p_tier: tier })
+        if (error) {
+          throw new Error(
+            /set_subscription/.test(error.message)
+              ? 'Host Pro needs a database update — run docs/migration-005-host-pro.sql first.'
+              : error.message
+          )
+        }
+        await this._loadProfile(this.currentUser.id)
+        return this.currentUser
+      }
+
+      const user = {
+        ...this.currentUser,
+        subscriptionTier: tier,
+        subscriptionStatus: tier === 'host_pro' ? 'active' : 'none'
       }
       this.currentUser = user
       storage.set(SESSION_KEY, JSON.stringify(user))
