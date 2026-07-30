@@ -62,22 +62,41 @@ watch(
   { immediate: true }
 )
 
-const coverPreview = ref(props.event?.coverUrl ?? null)
-const newCover = ref(null)
+/**
+ * Photo gallery — up to MAX_PHOTOS per event; the first one is the cover.
+ * Existing photos are https URLs, new picks are data: URLs (uploaded on
+ * save in live mode).
+ */
+const MAX_PHOTOS = 6
+const photos = ref(
+  props.event?.photoUrls?.length
+    ? [...props.event.photoUrls]
+    : props.event?.coverUrl
+      ? [props.event.coverUrl]
+      : []
+)
 const coverInput = ref(null)
 
 async function onCoverChange(event) {
-  const file = event.target.files?.[0]
+  const files = Array.from(event.target.files || [])
   event.target.value = ''
-  if (!file) return
+  if (!files.length) return
   error.value = ''
   try {
-    const dataUrl = await resizeCoverFile(file)
-    newCover.value = dataUrl
-    coverPreview.value = dataUrl
+    for (const file of files) {
+      if (photos.value.length >= MAX_PHOTOS) {
+        error.value = `Up to ${MAX_PHOTOS} photos per event.`
+        break
+      }
+      photos.value.push(await resizeCoverFile(file))
+    }
   } catch (e) {
     error.value = e.message
   }
+}
+
+function removePhoto(index) {
+  photos.value.splice(index, 1)
 }
 
 const DURATIONS = [
@@ -114,7 +133,8 @@ async function submit() {
     startsAt: startsAt.toISOString(),
     durationMinutes: Number(form.durationMinutes),
     maxCapacity: Math.max(2, Number(form.maxCapacity)),
-    coverDataUrl: newCover.value,
+    keptPhotoUrls: photos.value.filter((u) => !u.startsWith('data:')),
+    newPhotoDataUrls: photos.value.filter((u) => u.startsWith('data:')),
     approvalMode: form.approvalMode,
     minReliability: form.minReliabilityOn ? Number(form.minReliability) : null,
     pricePerSpot: Math.max(0, Number(form.pricePerSpot) || 0),
@@ -178,17 +198,40 @@ async function submit() {
         </button>
       </div>
 
-      <label class="field-label">Cover photo <span class="create-modal__optional">(optional)</span></label>
+      <label class="field-label">
+        Photos <span class="create-modal__optional">(optional, up to {{ MAX_PHOTOS }} — the first is the cover)</span>
+      </label>
       <div class="create-modal__cover-row">
-        <img v-if="coverPreview" :src="coverPreview" class="create-modal__cover-preview" alt="" />
-        <button type="button" class="btn-ghost create-modal__cover-btn" @click="coverInput.click()">
-          📷 {{ coverPreview ? 'Change photo' : 'Add a photo' }}
+        <div
+          v-for="(photo, i) in photos"
+          :key="i"
+          class="create-modal__photo"
+        >
+          <img :src="photo" class="create-modal__cover-preview" alt="" />
+          <span v-if="i === 0" class="create-modal__photo-cover-tag">Cover</span>
+          <button
+            type="button"
+            class="create-modal__photo-remove"
+            :aria-label="`Remove photo ${i + 1}`"
+            @click="removePhoto(i)"
+          >
+            ✕
+          </button>
+        </div>
+        <button
+          v-if="photos.length < MAX_PHOTOS"
+          type="button"
+          class="btn-ghost create-modal__cover-btn"
+          @click="coverInput.click()"
+        >
+          📷 {{ photos.length ? 'Add more' : 'Add photos' }}
         </button>
         <input
           ref="coverInput"
           class="create-modal__cover-file"
           type="file"
           accept="image/*"
+          multiple
           @change="onCoverChange"
         />
       </div>
@@ -395,14 +438,53 @@ async function submit() {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.create-modal__photo {
+  position: relative;
 }
 
 .create-modal__cover-preview {
-  width: 120px;
+  display: block;
+  width: 104px;
   aspect-ratio: 16 / 9;
   object-fit: cover;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
+}
+
+.create-modal__photo-cover-tag {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(212, 175, 106, 0.9);
+  color: #0b0f19;
+}
+
+.create-modal__photo-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 10px;
+  line-height: 1;
+  background: rgba(17, 24, 39, 0.92);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.create-modal__photo-remove:hover {
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 .create-modal__cover-btn {

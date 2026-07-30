@@ -42,6 +42,15 @@ const showRequests = ref(false)
 const showAttendance = ref(false)
 const showedUp = ref([]) // guest ids ticked as present in the attendance panel
 const exactCoords = ref(null) // unlocked coords for blurred-location events
+const photoIndex = ref(0) // which gallery photo is shown big
+
+const photos = computed(() =>
+  props.event.photoUrls?.length
+    ? props.event.photoUrls
+    : props.event.coverUrl
+      ? [props.event.coverUrl]
+      : []
+)
 
 const category = computed(() => categoryOf(props.event.category))
 const live = computed(() => isLive(props.event))
@@ -298,6 +307,7 @@ watch(
   async (id) => {
     confirmingCancel.value = false
     error.value = ''
+    photoIndex.value = 0
     if (chatOpen.value) {
       await chatStore.open(id)
       scrollChat()
@@ -317,7 +327,24 @@ onBeforeUnmount(() => chatStore.close())
 
 <template>
   <article class="event-card glass-panel">
-    <img v-if="event.coverUrl" :src="event.coverUrl" class="event-card__cover" alt="" />
+    <img
+      v-if="photos.length"
+      :src="photos[Math.min(photoIndex, photos.length - 1)]"
+      class="event-card__cover"
+      alt=""
+    />
+    <div v-if="photos.length > 1" class="event-card__gallery">
+      <button
+        v-for="(photo, i) in photos"
+        :key="i"
+        class="event-card__thumb"
+        :class="{ 'event-card__thumb--active': i === photoIndex }"
+        :aria-label="`Photo ${i + 1}`"
+        @click="photoIndex = i"
+      >
+        <img :src="photo" alt="" />
+      </button>
+    </div>
 
     <button class="event-card__close" aria-label="Close" @click="emit('close')">✕</button>
 
@@ -607,6 +634,46 @@ onBeforeUnmount(() => chatStore.close())
   aspect-ratio: 16 / 9;
   object-fit: cover;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.event-card__gallery {
+  display: flex;
+  gap: 6px;
+  margin: -8px 0 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.event-card__gallery::-webkit-scrollbar {
+  display: none;
+}
+
+.event-card__thumb {
+  flex-shrink: 0;
+  width: 58px;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  opacity: 0.65;
+  transition: all 0.15s ease;
+}
+
+.event-card__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.event-card__thumb--active {
+  border-color: var(--gold);
+  opacity: 1;
+}
+
+.event-card__thumb:hover {
+  opacity: 1;
 }
 
 .event-card__close {

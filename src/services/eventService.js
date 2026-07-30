@@ -85,8 +85,14 @@ function clone(event) {
     attendeeIds: [...event.attendeeIds],
     waitlistIds: [...(event.waitlistIds || [])],
     requestedIds: [...(event.requestedIds || [])],
+    photoUrls: [...(event.photoUrls || [])],
     payments: { ...(event.payments || {}) }
   }
+}
+
+/** Kept existing photos + freshly uploaded ones, in display order. */
+function mergePhotos(data) {
+  return [...(data.keptPhotoUrls || []), ...(data.newPhotoDataUrls || [])]
 }
 
 function demoFind(eventId) {
@@ -115,6 +121,7 @@ const demo = {
   },
 
   async createEvent(data, host) {
+    const photos = mergePhotos(data)
     const event = {
       id: `e-${Date.now().toString(36)}`,
       hostId: host.id,
@@ -129,7 +136,8 @@ const demo = {
       startsAt: data.startsAt,
       durationMinutes: data.durationMinutes,
       maxCapacity: data.maxCapacity,
-      coverUrl: data.coverDataUrl || null,
+      coverUrl: photos[0] || null,
+      photoUrls: photos,
       approvalMode: !!data.approvalMode,
       minReliability: data.minReliability ?? null,
       pricePerSpot: data.pricePerSpot || 0,
@@ -148,6 +156,7 @@ const demo = {
 
   async updateEvent(eventId, data) {
     const event = demoFind(eventId)
+    const photos = mergePhotos(data)
     Object.assign(event, {
       title: data.title.trim(),
       description: data.description.trim(),
@@ -160,7 +169,8 @@ const demo = {
       minReliability: data.minReliability ?? null,
       pricePerSpot: data.pricePerSpot || 0,
       ladiesOnly: !!data.ladiesOnly,
-      ...(data.coverDataUrl ? { coverUrl: data.coverDataUrl } : {})
+      coverUrl: photos[0] || null,
+      photoUrls: photos
     })
     demoPromote(event)
     emit({ type: 'UPDATE', event: clone(event) })
@@ -407,6 +417,11 @@ function toEvent(row) {
     durationMinutes: row.duration_minutes,
     maxCapacity: row.max_capacity,
     coverUrl: row.cover_url || null,
+    photoUrls: row.photo_urls?.length
+      ? row.photo_urls
+      : row.cover_url
+        ? [row.cover_url]
+        : [],
     approvalMode: !!row.approval_mode,
     minReliability: row.min_reliability ?? null,
     pricePerSpot: Number(row.price_per_spot || 0),
@@ -478,29 +493,44 @@ const live = {
   },
 
   async createEvent(data, host) {
-    const cover_url = data.coverDataUrl ? await uploadCover(host.id, data.coverDataUrl) : null
-    const { data: row, error } = await supabase
+    const uploaded = []
+    for (const dataUrl of data.newPhotoDataUrls || []) {
+      uploaded.push(await uploadCover(host.id, dataUrl))
+    }
+    const photo_urls = [...(data.keptPhotoUrls || []), ...uploaded]
+    const insertPayload = {
+      host_id: host.id,
+      title: data.title.trim(),
+      description: data.description.trim(),
+      category: data.category,
+      location_name: data.locationName.trim(),
+      lat: data.lat,
+      lng: data.lng,
+      starts_at: data.startsAt,
+      duration_minutes: data.durationMinutes,
+      max_capacity: data.maxCapacity,
+      cover_url: photo_urls[0] || null,
+      photo_urls,
+      approval_mode: !!data.approvalMode,
+      min_reliability: data.minReliability ?? null,
+      price_per_spot: data.pricePerSpot || 0,
+      is_ladies_only: !!data.ladiesOnly,
+      is_location_blurred: !!data.locationBlurred
+    }
+    let { data: row, error } = await supabase
       .from('events')
-      .insert({
-        host_id: host.id,
-        title: data.title.trim(),
-        description: data.description.trim(),
-        category: data.category,
-        location_name: data.locationName.trim(),
-        lat: data.lat,
-        lng: data.lng,
-        starts_at: data.startsAt,
-        duration_minutes: data.durationMinutes,
-        max_capacity: data.maxCapacity,
-        cover_url,
-        approval_mode: !!data.approvalMode,
-        min_reliability: data.minReliability ?? null,
-        price_per_spot: data.pricePerSpot || 0,
-        is_ladies_only: !!data.ladiesOnly,
-        is_location_blurred: !!data.locationBlurred
-      })
+      .insert(insertPayload)
       .select(EVENT_SELECT)
       .single()
+    if (error && /photo_urls/.test(error.message)) {
+      // Database hasn't run migration 004 yet — save with the cover only
+      delete insertPayload.photo_urls
+      ;({ data: row, error } = await supabase
+        .from('events')
+        .insert(insertPayload)
+        .select(EVENT_SELECT)
+        .single())
+    }
     if (error) throw friendly(error)
     // Host always attends their own event
     await supabase.from('rsvps').insert({ event_id: row.id, user_id: host.id })
@@ -529,20 +559,35 @@ const live = {
       price_per_spot: data.pricePerSpot || 0,
       is_ladies_only: !!data.ladiesOnly
     }
-    if (data.coverDataUrl) {
+    const uploaded = []
+    if (data.newPhotoDataUrls?.length) {
       const { data: current } = await supabase
         .from('events')
         .select('host_id')
         .eq('id', eventId)
         .single()
-      patch.cover_url = await uploadCover(current.host_id, data.coverDataUrl)
+      for (const dataUrl of data.newPhotoDataUrls) {
+        uploaded.push(await uploadCover(current.host_id, dataUrl))
+      }
     }
-    const { data: row, error } = await supabase
+    patch.photo_urls = [...(data.keptPhotoUrls || []), ...uploaded]
+    patch.cover_url = patch.photo_urls[0] || null
+    let { data: row, error } = await supabase
       .from('events')
       .update(patch)
       .eq('id', eventId)
       .select(EVENT_SELECT)
       .single()
+    if (error && /photo_urls/.test(error.message)) {
+      // Database hasn't run migration 004 yet — save with the cover only
+      delete patch.photo_urls
+      ;({ data: row, error } = await supabase
+        .from('events')
+        .update(patch)
+        .eq('id', eventId)
+        .select(EVENT_SELECT)
+        .single())
+    }
     if (error) throw friendly(error)
     return toEvent(row)
   },
