@@ -6,6 +6,7 @@
  */
 import { reactive, ref } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
+import WynLogo from '@/components/ui/WynLogo.vue'
 
 defineProps({
   prompt: { type: String, default: '' } // context line, e.g. "Sign in to join this event"
@@ -55,7 +56,7 @@ async function submit() {
 
 <template>
   <div class="login-panel">
-    <div class="login-panel__logo">🗺️</div>
+    <div class="login-panel__logo"><WynLogo :size="52" /></div>
     <h1 class="login-panel__title">WYN</h1>
     <p class="login-panel__subtitle">
       <template v-if="prompt">{{ prompt }}</template>
@@ -139,7 +140,9 @@ async function submit() {
 }
 
 .login-panel__logo {
-  font-size: 44px;
+  display: flex;
+  justify-content: center;
+  filter: drop-shadow(0 4px 14px rgba(124, 21, 51, 0.55));
 }
 
 .login-panel__title {

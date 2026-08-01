@@ -8,6 +8,7 @@ import { useNotifStore } from '@/stores/notifStore'
 import { formatTime } from '@/utils/datetime'
 import { isDemoForced } from '@/services/supabaseClient'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
+import WynLogo from '@/components/ui/WynLogo.vue'
 
 const eventStore = useEventStore()
 const authStore = useAuthStore()
@@ -35,28 +36,7 @@ function openNotif(notif) {
       title="Back to the full Qatar view"
       @click="$emit('home')"
     >
-      <svg class="top-bar__logo" viewBox="0 0 40 40" width="36" height="36" aria-hidden="true">
-        <defs>
-          <linearGradient id="wyn-pin" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#c62d55" />
-            <stop offset="1" stop-color="#8b1538" />
-          </linearGradient>
-          <linearGradient id="wyn-spark" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#f4e9c9" />
-            <stop offset="1" stop-color="#d4af6a" />
-          </linearGradient>
-        </defs>
-        <path
-          d="M20 2.5C11.9 2.5 5.4 9 5.4 17.1c0 7.2 5.5 13 12.3 20.6 1.2 1.4 3.4 1.4 4.6 0C29.1 30.1 34.6 24.3 34.6 17.1 34.6 9 28.1 2.5 20 2.5Z"
-          fill="url(#wyn-pin)"
-          stroke="rgba(244, 233, 201, 0.9)"
-          stroke-width="1.6"
-        />
-        <path
-          d="M20 8.6l2.5 6 6 2.5-6 2.5-2.5 6-2.5-6-6-2.5 6-2.5z"
-          fill="url(#wyn-spark)"
-        />
-      </svg>
+      <span class="top-bar__logo"><WynLogo :size="34" /></span>
       <div class="top-bar__brand-text">
         <div class="top-bar__name">
           WYN <span v-if="isDemoForced" class="top-bar__demo-badge">DEMO</span>
@@ -170,7 +150,8 @@ function openNotif(notif) {
 
 .top-bar__logo {
   display: block;
-  filter: drop-shadow(0 2px 6px rgba(139, 21, 56, 0.55));
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 7px rgba(124, 21, 51, 0.65));
 }
 
 .top-bar__brand-text {
