@@ -317,25 +317,6 @@ function toggleList() {
 
     <TopBar @signin="openLogin('')" />
 
-    <!-- "Share to the recap" banner after an event I attended ends -->
-    <Transition name="fade">
-      <div v-if="recapPrompt && !storyEvent && !uploadEvent" class="map-view__recap glass-panel">
-        <span class="map-view__recap-text">
-          How was “{{ recapPrompt.title }}”? Share a quick photo or clip to the WYN Memory Map!
-        </span>
-        <button class="btn-primary map-view__recap-share" @click="uploadEvent = recapPrompt">
-          📸 Share
-        </button>
-        <button
-          class="map-view__recap-dismiss"
-          aria-label="Dismiss"
-          @click="dismissRecap(recapPrompt.id)"
-        >
-          ✕
-        </button>
-      </div>
-    </Transition>
-
     <!-- Floating map controls -->
     <div class="map-view__controls">
       <button class="map-view__ctrl glass-panel" title="Reset view" @click="liveMap?.resetView()">🇶🇦</button>
@@ -405,6 +386,27 @@ function toggleList() {
         <div v-if="pickingLocation" class="map-view__hint glass-panel">
           Search above or tap the map to set the spot
           <button class="map-view__hint-cancel" @click="stopPickingLocation">Back to form</button>
+        </div>
+      </Transition>
+      <!-- "Share to the recap" banner after an event I attended ends -->
+      <Transition name="fade">
+        <div
+          v-if="recapPrompt && !storyEvent && !uploadEvent && !pickMode && !selectedEvent && !showCreateModal"
+          class="map-view__recap glass-panel"
+        >
+          <span class="map-view__recap-text">
+            How was “{{ recapPrompt.title }}”? Share a quick photo or clip to the WYN Memory Map!
+          </span>
+          <button class="btn-primary map-view__recap-share" @click="uploadEvent = recapPrompt">
+            📸 Share
+          </button>
+          <button
+            class="map-view__recap-dismiss"
+            aria-label="Dismiss"
+            @click="dismissRecap(recapPrompt.id)"
+          >
+            ✕
+          </button>
         </div>
       </Transition>
       <TimePills v-if="!pickMode && !pickingLocation && !selectedEvent && !showList" />
@@ -547,11 +549,6 @@ function toggleList() {
 }
 
 .map-view__recap {
-  position: absolute;
-  top: 74px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 26;
   display: flex;
   align-items: center;
   gap: 10px;
