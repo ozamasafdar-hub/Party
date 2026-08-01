@@ -1,4 +1,4 @@
-import { SEED_EVENTS, SEED_MEMBERS, SEED_MESSAGES } from '@/data/seedData'
+import { SEED_EVENTS, SEED_MEMBERS, SEED_MESSAGES, SEED_MEMORIES } from '@/data/seedData'
 import { supabase, isLive } from './supabaseClient'
 
 /**
@@ -27,7 +27,8 @@ const db = {
     payments: {}
   })),
   members: SEED_MEMBERS.map((m) => ({ ...m })),
-  messages: SEED_MESSAGES.map((m) => ({ ...m }))
+  messages: SEED_MESSAGES.map((m) => ({ ...m })),
+  memories: SEED_MEMORIES.map((m) => ({ ...m, reactions: { ...m.reactions } }))
 }
 
 function demoReliabilityOf(userId) {
@@ -335,6 +336,41 @@ const demo = {
       : { lat: event.lat, lng: event.lng }
   },
 
+  /* 24h memory recaps ------------------------------------------------------ */
+
+  async listMemories() {
+    return db.memories.map((m) => ({ ...m, reactions: { ...m.reactions } }))
+  },
+
+  async addMemory(eventId, user, { mediaDataUrl, mediaType, caption }) {
+    const event = demoFind(eventId)
+    if (!event.attendeeIds.includes(user.id)) {
+      throw new Error('Only guests who attended can post to this recap')
+    }
+    const end = new Date(event.startsAt).getTime() + event.durationMinutes * 60000
+    if (Date.now() < end) throw new Error('The recap opens once the event ends')
+    if (Date.now() > end + 24 * 3600000) throw new Error('This recap has expired')
+    const memory = {
+      id: `mem-${Date.now().toString(36)}`,
+      eventId,
+      userId: user.id,
+      mediaUrl: mediaDataUrl,
+      mediaType,
+      caption: (caption || '').trim().slice(0, 100),
+      reactions: {},
+      at: new Date().toISOString()
+    }
+    db.memories.push(memory)
+    return { ...memory, reactions: {} }
+  },
+
+  async reactToMemory(memoryId, emoji) {
+    const memory = db.memories.find((m) => m.id === memoryId)
+    if (!memory) throw new Error('Memory not found')
+    memory.reactions[emoji] = (memory.reactions[emoji] || 0) + 1
+    return { ...memory, reactions: { ...memory.reactions } }
+  },
+
   subscribeToEvents(callback) {
     listeners.add(callback)
     return () => {
@@ -440,6 +476,19 @@ export function toMember(profile) {
     flaked: profile.events_flaked ?? 0,
     subscriptionTier: profile.subscription_tier ?? 'free',
     subscriptionStatus: profile.subscription_status ?? 'none'
+  }
+}
+
+function toMemory(row) {
+  return {
+    id: row.id,
+    eventId: row.event_id,
+    userId: row.user_id,
+    mediaUrl: row.media_url,
+    mediaType: row.media_type,
+    caption: row.caption || '',
+    reactions: row.reactions || {},
+    at: row.created_at
   }
 }
 
@@ -750,6 +799,60 @@ const live = {
     return data || null
   },
 
+  /* 24h memory recaps ------------------------------------------------------ */
+
+  async listMemories() {
+    const { data, error } = await supabase
+      .from('event_memories')
+      .select('*')
+      .order('created_at')
+    if (error) {
+      // Database hasn't run migration 006 yet — the map just has no recaps
+      if (/event_memories/.test(error.message)) return []
+      throw friendly(error)
+    }
+    return data.map(toMemory)
+  },
+
+  async addMemory(eventId, user, { mediaDataUrl, mediaType, caption }) {
+    const { dataUrlToBlob } = await import('@/utils/image')
+    const ext = mediaType === 'video' ? 'mp4' : 'jpg'
+    const path = `${user.id}/${crypto.randomUUID()}.${ext}`
+    const blob = dataUrlToBlob(mediaDataUrl)
+    const { error: uploadError } = await supabase.storage
+      .from('memories')
+      .upload(path, blob, { contentType: blob.type })
+    if (uploadError) throw new Error(uploadError.message)
+    const media_url = supabase.storage.from('memories').getPublicUrl(path).data.publicUrl
+    const { data, error } = await supabase
+      .from('event_memories')
+      .insert({
+        event_id: eventId,
+        user_id: user.id,
+        media_url,
+        media_type: mediaType,
+        caption: (caption || '').trim().slice(0, 100) || null
+      })
+      .select()
+      .single()
+    if (error) throw friendly(error)
+    return toMemory(data)
+  },
+
+  async reactToMemory(memoryId, emoji) {
+    const { error } = await supabase.rpc('react_to_memory', {
+      p_memory_id: memoryId,
+      p_emoji: emoji
+    })
+    if (error) throw friendly(error)
+    const { data } = await supabase
+      .from('event_memories')
+      .select('*')
+      .eq('id', memoryId)
+      .single()
+    return data ? toMemory(data) : null
+  },
+
   async leaveEvent(eventId, userId) {
     const { error } = await supabase
       .from('rsvps')
@@ -880,6 +983,9 @@ export const declineRequest = (...a) => backend.declineRequest(...a)
 export const recordPayment = (...a) => backend.recordPayment(...a)
 export const recordAttendance = (...a) => backend.recordAttendance(...a)
 export const getExactLocation = (...a) => backend.getExactLocation(...a)
+export const listMemories = (...a) => backend.listMemories(...a)
+export const addMemory = (...a) => backend.addMemory(...a)
+export const reactToMemory = (...a) => backend.reactToMemory(...a)
 export const leaveEvent = (...a) => backend.leaveEvent(...a)
 export const subscribeToEvents = (...a) => backend.subscribeToEvents(...a)
 export const listMessages = (...a) => backend.listMessages(...a)

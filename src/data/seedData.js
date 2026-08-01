@@ -45,7 +45,59 @@ export const SEED_MESSAGES = [
   }
 ]
 
+/** Recap photos on the ended dhow-cruise event (24h memory pin demo). */
+export const SEED_MEMORIES = [
+  {
+    id: 'mem-1',
+    eventId: 'e-dhow',
+    userId: 'u-noora',
+    mediaUrl: 'https://picsum.photos/seed/wyndhow1/720/1080',
+    mediaType: 'image',
+    caption: 'Golden hour from the top deck 🌅',
+    reactions: { '🔥': 12, '👏': 4 },
+    at: new Date(Date.now() - 2 * 3600000).toISOString()
+  },
+  {
+    id: 'mem-2',
+    eventId: 'e-dhow',
+    userId: 'u-hassan',
+    mediaUrl: 'https://picsum.photos/seed/wyndhow2/720/1080',
+    mediaType: 'image',
+    caption: 'Grill master at work 🍢',
+    reactions: { '🔥': 7 },
+    at: new Date(Date.now() - 100 * 60000).toISOString()
+  },
+  {
+    id: 'mem-3',
+    eventId: 'e-dhow',
+    userId: 'u-mariam',
+    mediaUrl: 'https://picsum.photos/seed/wyndhow3/720/1080',
+    mediaType: 'image',
+    caption: 'Skyline views forever',
+    reactions: { '👏': 9 },
+    at: new Date(Date.now() - 45 * 60000).toISOString()
+  }
+]
+
 export const SEED_EVENTS = [
+  {
+    // Ended 3 hours ago — lives on as a 24h memory pin with a story recap
+    id: 'e-dhow',
+    hostId: 'u-hassan',
+    title: 'Dhow cruise & grill night',
+    description:
+      'Chartered a traditional dhow from the Corniche — skyline views, music and a grill on board.',
+    category: 'yacht',
+    locationName: 'Dhow Harbour, Corniche',
+    lat: 25.292,
+    lng: 51.541,
+    startsAt: at(-6),
+    durationMinutes: 180,
+    maxCapacity: 12,
+    attendeeIds: ['u-hassan', 'u-noora', 'u-mariam', 'u-omar', 'u-layla'],
+    coverUrl: 'https://picsum.photos/seed/wyndhow1/800/450',
+    photoUrls: ['https://picsum.photos/seed/wyndhow1/800/450']
+  },
   {
     id: 'e-bowling',
     hostId: 'u-hassan',

@@ -88,6 +88,25 @@ export function buildEventIcon(
   })
 }
 
+/**
+ * 24h Memory Pin — an ended event living on as a story recap. A pulsing
+ * purple/gold ring with a camera glyph and an "expires in Nh" badge.
+ */
+export function buildMemoryIcon(event, hoursLeft) {
+  const html = `
+    <span class="memory-pin__glow"></span>
+    <span class="memory-pin__ring"><span class="memory-pin__icon">📸</span></span>
+    <span class="memory-pin__badge">${hoursLeft}h</span>`
+
+  return L.divIcon({
+    className: 'event-pin event-pin--memory',
+    html,
+    iconSize: [52, 64],
+    iconAnchor: [26, 32],
+    tooltipAnchor: [0, -30]
+  })
+}
+
 /** Temporary pin shown while the member picks a spot for a new event. */
 export function buildDraftIcon() {
   const html = `

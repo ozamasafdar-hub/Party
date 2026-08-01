@@ -226,6 +226,67 @@ html .leaflet-container {
   }
 }
 
+/* 24h Memory Pins — ended events living on as story recaps */
+.event-pin--memory {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.memory-pin__glow {
+  position: absolute;
+  left: 50%;
+  top: 26px;
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(167, 139, 250, 0.75) 0%, rgba(212, 175, 106, 0.25) 55%, transparent 72%);
+  animation: pin-glow 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.memory-pin__ring {
+  position: absolute;
+  left: 50%;
+  top: 26px;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(13, 18, 30, 0.92);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  box-shadow:
+    0 0 0 3px rgba(167, 139, 250, 0.9),
+    0 0 14px rgba(167, 139, 250, 0.55),
+    0 0 22px rgba(212, 175, 106, 0.35);
+}
+
+.memory-pin__icon {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.memory-pin__badge {
+  position: absolute;
+  left: 50%;
+  top: 48px;
+  transform: translateX(-50%);
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  background: linear-gradient(120deg, #a78bfa, #d4af6a);
+  color: #0b0f19;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+
 @keyframes pin-pulse {
   0% {
     transform: scale(0.6);

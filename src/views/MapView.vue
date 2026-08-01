@@ -19,7 +19,10 @@ import MapStyleControl from '@/components/map/MapStyleControl.vue'
 import MapSearchBar from '@/components/map/MapSearchBar.vue'
 import TimePills from '@/components/map/TimePills.vue'
 import HostProModal from '@/components/pro/HostProModal.vue'
+import StoryViewer from '@/components/memories/StoryViewer.vue'
+import MemoryUploadSheet from '@/components/memories/MemoryUploadSheet.vue'
 import { useHostPermissions } from '@/composables/useHostPermissions'
+import { inMemoryWindow } from '@/utils/datetime'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useNotifStore } from '@/stores/notifStore'
@@ -132,7 +135,60 @@ onBeforeUnmount(() => {
 function onSelect(eventId) {
   if (pickMode.value) return
   showList.value = false
+  // In recap mode a pin opens the story viewer, not the event card
+  if (eventStore.mapMode === 'memories') {
+    storyEvent.value = eventStore.events.find((e) => e.id === eventId) || null
+    return
+  }
   eventStore.select(eventId)
+}
+
+/* --- 24h memory recaps ---------------------------------------------------- */
+
+const storyEvent = ref(null)
+const uploadEvent = ref(null)
+
+const readDismissed = () => {
+  try {
+    return new Set(JSON.parse(sessionStorage.getItem('wyn:recap-dismissed') || '[]'))
+  } catch {
+    return new Set()
+  }
+}
+const dismissedRecaps = ref(readDismissed())
+
+function dismissRecap(id) {
+  dismissedRecaps.value = new Set([...dismissedRecaps.value, id])
+  try {
+    sessionStorage.setItem('wyn:recap-dismissed', JSON.stringify([...dismissedRecaps.value]))
+  } catch {
+    /* session-only convenience */
+  }
+}
+
+/** An event I attended just ended and I haven't posted to its recap yet. */
+const recapPrompt = computed(() => {
+  const meId = authStore.currentUser?.id
+  if (!meId) return null
+  return (
+    eventStore.events.find(
+      (e) =>
+        inMemoryWindow(e) &&
+        e.attendeeIds.includes(meId) &&
+        !dismissedRecaps.value.has(e.id) &&
+        !eventStore.memories.some((m) => m.eventId === e.id && m.userId === meId)
+    ) || null
+  )
+})
+
+function onMemoryShared() {
+  const event = uploadEvent.value
+  uploadEvent.value = null
+  // Jump straight into the recap so the member sees their post live
+  if (event && !storyEvent.value) {
+    eventStore.setMapMode('memories')
+    storyEvent.value = event
+  }
 }
 
 const { createBlockReason } = useHostPermissions()
@@ -248,17 +304,37 @@ function toggleList() {
   <div class="map-view">
     <LiveMap
       ref="liveMap"
-      :events="eventStore.visibleEvents"
+      :events="eventStore.mapEvents"
       :selected-id="eventStore.selectedEventId"
       :pick-mode="pickMode"
       :style-key="mapStyle"
       :show-heat="showHeat"
+      :memory-mode="eventStore.mapMode === 'memories'"
       @select="onSelect"
       @pick="onPick"
       @fallback="onTileFallback"
     />
 
     <TopBar @signin="openLogin('')" />
+
+    <!-- "Share to the recap" banner after an event I attended ends -->
+    <Transition name="fade">
+      <div v-if="recapPrompt && !storyEvent && !uploadEvent" class="map-view__recap glass-panel">
+        <span class="map-view__recap-text">
+          How was “{{ recapPrompt.title }}”? Share a quick photo or clip to the WYN Memory Map!
+        </span>
+        <button class="btn-primary map-view__recap-share" @click="uploadEvent = recapPrompt">
+          📸 Share
+        </button>
+        <button
+          class="map-view__recap-dismiss"
+          aria-label="Dismiss"
+          @click="dismissRecap(recapPrompt.id)"
+        >
+          ✕
+        </button>
+      </div>
+    </Transition>
 
     <!-- Floating map controls -->
     <div class="map-view__controls">
@@ -352,6 +428,24 @@ function toggleList() {
         @upgraded="showProModal = false"
       />
     </Transition>
+
+    <!-- Story recap viewer (memory pins) -->
+    <StoryViewer
+      v-if="storyEvent"
+      :event="storyEvent"
+      :frozen="showLogin || !!uploadEvent"
+      @close="storyEvent = null"
+      @add="uploadEvent = storyEvent"
+      @login-required="openLogin('Sign in to react and follow hosts.')"
+    />
+
+    <!-- Recap upload sheet -->
+    <MemoryUploadSheet
+      v-if="uploadEvent"
+      :event="uploadEvent"
+      @close="uploadEvent = null"
+      @shared="onMemoryShared"
+    />
 
     <!-- What's on feed -->
     <Transition name="slide-up">
@@ -450,6 +544,43 @@ function toggleList() {
 .map-view__fab--limited {
   filter: saturate(0.55);
   opacity: 0.85;
+}
+
+.map-view__recap {
+  position: absolute;
+  top: 74px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 26;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(520px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+}
+
+.map-view__recap-text {
+  flex: 1;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.map-view__recap-share {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  font-size: 12.5px;
+}
+
+.map-view__recap-dismiss {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  font-size: 11px;
 }
 
 .map-view__fab {

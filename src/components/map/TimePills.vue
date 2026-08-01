@@ -18,14 +18,30 @@ const PILLS = [
 
 <template>
   <div class="time-pills">
+    <template v-if="eventStore.mapMode === 'live'">
+      <button
+        v-for="pill in PILLS"
+        :key="pill.key"
+        class="time-pills__pill"
+        :class="{ 'time-pills__pill--active': eventStore.timeWindow === pill.key }"
+        @click="eventStore.setTimeWindow(pill.key)"
+      >
+        {{ pill.label }}
+      </button>
+    </template>
     <button
-      v-for="pill in PILLS"
-      :key="pill.key"
+      v-else
       class="time-pills__pill"
-      :class="{ 'time-pills__pill--active': eventStore.timeWindow === pill.key }"
-      @click="eventStore.setTimeWindow(pill.key)"
+      @click="eventStore.setMapMode('live')"
     >
-      {{ pill.label }}
+      📍 Live events
+    </button>
+    <button
+      class="time-pills__pill time-pills__pill--memory"
+      :class="{ 'time-pills__pill--memory-active': eventStore.mapMode === 'memories' }"
+      @click="eventStore.setMapMode(eventStore.mapMode === 'memories' ? 'live' : 'memories')"
+    >
+      📸 Past 24h recaps
     </button>
   </div>
 </template>
@@ -66,5 +82,15 @@ const PILLS = [
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);
   border-color: rgba(255, 255, 255, 0.25);
   box-shadow: 0 4px 18px rgba(139, 21, 56, 0.5);
+}
+
+.time-pills__pill--memory {
+  border-color: rgba(167, 139, 250, 0.45);
+}
+
+.time-pills__pill--memory-active {
+  background: linear-gradient(135deg, #7c5cd6 0%, #a78bfa 60%, #d4af6a 130%);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 18px rgba(167, 139, 250, 0.5);
 }
 </style>

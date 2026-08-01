@@ -18,9 +18,9 @@ import 'leaflet.markercluster'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.heat'
 import { MAP_OPTIONS, BASEMAPS, DEFAULT_BASEMAP, QATAR_CENTER } from '@/config/map'
-import { buildEventIcon, buildDraftIcon } from './eventMarker'
+import { buildEventIcon, buildDraftIcon, buildMemoryIcon } from './eventMarker'
 import { addVectorBasemap } from './vectorBasemap'
-import { isLive, formatWhen } from '@/utils/datetime'
+import { isLive, formatWhen, memoryHoursLeft } from '@/utils/datetime'
 import { useEventStore } from '@/stores/eventStore'
 import { useFollowStore } from '@/stores/followStore'
 
@@ -32,7 +32,8 @@ const props = defineProps({
   selectedId: { type: String, default: null },
   pickMode: { type: Boolean, default: false },
   styleKey: { type: String, default: DEFAULT_BASEMAP },
-  showHeat: { type: Boolean, default: false }
+  showHeat: { type: Boolean, default: false },
+  memoryMode: { type: Boolean, default: false } // 📸 past-24h recap layer
 })
 
 const emit = defineEmits(['select', 'pick', 'fallback'])
@@ -180,7 +181,7 @@ function renderMarkers(events) {
     const existing = markersById.get(event.id)
 
     // Blurred-location events get a dashed "somewhere around here" circle
-    if (event.locationBlurred) {
+    if (event.locationBlurred && !props.memoryMode) {
       const circle = blurCirclesById.get(event.id)
       if (circle) {
         circle.setLatLng([event.lat, event.lng])
@@ -200,6 +201,11 @@ function renderMarkers(events) {
       }
     }
 
+    const buildIcon = () =>
+      props.memoryMode
+        ? buildMemoryIcon(event, memoryHoursLeft(event))
+        : buildEventIcon(event, state)
+
     if (existing) {
       existing.setLatLng([event.lat, event.lng])
       // Only rebuild the icon when something it displays actually changed
@@ -208,15 +214,16 @@ function renderMarkers(events) {
         event.attendeeIds.length,
         event.category,
         event.featuredPin,
-        event.ladiesOnly
+        event.ladiesOnly,
+        props.memoryMode && memoryHoursLeft(event)
       ])
       if (existing._pinSignature !== signature) {
-        existing.setIcon(buildEventIcon(event, state))
+        existing.setIcon(buildIcon())
         existing._pinSignature = signature
       }
     } else {
       const marker = L.marker([event.lat, event.lng], {
-        icon: buildEventIcon(event, state),
+        icon: buildIcon(),
         riseOnHover: true
       })
         .bindTooltip(tooltipHtml(event), {

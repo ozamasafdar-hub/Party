@@ -13,10 +13,20 @@ import {
   recordPayment,
   recordAttendance,
   getExactLocation,
+  listMemories as fetchMemories,
+  addMemory as postMemory,
+  reactToMemory as sendReaction,
   leaveEvent,
   subscribeToEvents
 } from '@/services/eventService'
-import { hasEnded, isLive, isTonight, isTomorrow, isWeekend } from '@/utils/datetime'
+import {
+  hasEnded,
+  isLive,
+  isTonight,
+  isTomorrow,
+  isWeekend,
+  inMemoryWindow
+} from '@/utils/datetime'
 import { useNotifStore } from './notifStore'
 import { useAuthStore } from './authStore'
 
@@ -24,6 +34,8 @@ export const useEventStore = defineStore('events', {
   state: () => ({
     events: [],
     members: [],
+    memories: [], // 24h post-event recap photos/clips
+    mapMode: 'live', // 'live' | 'memories' (📸 past-24h recaps layer)
     selectedEventId: null,
     activeCategory: null, // null = show every category
     timeWindow: 'all', // 'all' | 'now' | 'today' | 'week'
@@ -73,6 +85,24 @@ export const useEventStore = defineStore('events', {
       return state.events.find((e) => e.id === state.selectedEventId) || null
     },
 
+    /** Ended <24h ago with at least one recap upload — glowing memory pins. */
+    memoryEvents(state) {
+      const withMemories = new Set(state.memories.map((m) => m.eventId))
+      return state.events.filter((e) => inMemoryWindow(e) && withMemories.has(e.id))
+    },
+
+    /** What the map should plot right now, per the layer toggle. */
+    mapEvents(state) {
+      return state.mapMode === 'memories' ? this.memoryEvents : this.visibleEvents
+    },
+
+    memoriesFor(state) {
+      return (eventId) =>
+        state.memories
+          .filter((m) => m.eventId === eventId)
+          .sort((a, b) => new Date(a.at) - new Date(b.at))
+    },
+
     memberById(state) {
       const index = new Map(state.members.map((m) => [m.id, m]))
       return (id) => index.get(id) || null
@@ -118,9 +148,14 @@ export const useEventStore = defineStore('events', {
     async load() {
       this.loading = true
       try {
-        const [events, members] = await Promise.all([listEvents(), listMembers()])
+        const [events, members, memories] = await Promise.all([
+          listEvents(),
+          listMembers(),
+          fetchMemories()
+        ])
         this.events = events
         this.members = members
+        this.memories = memories
       } finally {
         this.loading = false
       }
@@ -174,6 +209,26 @@ export const useEventStore = defineStore('events', {
 
     setTimeWindow(window) {
       this.timeWindow = window
+    },
+
+    setMapMode(mode) {
+      this.mapMode = mode
+      this.selectedEventId = null
+    },
+
+    /** Post a photo/clip to an ended event's 24h recap. */
+    async addMemory(eventId, user, media) {
+      const memory = await postMemory(eventId, user, media)
+      this.memories.push(memory)
+      useNotifStore().flash('📸 Added to the recap — visible for 24 hours')
+      return memory
+    },
+
+    async reactToMemory(memoryId, emoji) {
+      const updated = await sendReaction(memoryId, emoji)
+      if (!updated) return
+      const i = this.memories.findIndex((m) => m.id === memoryId)
+      if (i !== -1) this.memories.splice(i, 1, updated)
     },
 
     setOnlyMine(on) {

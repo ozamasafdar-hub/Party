@@ -48,6 +48,23 @@ export function hasEnded(event, now = new Date()) {
   return now.getTime() > end
 }
 
+const MEMORY_WINDOW_MS = 24 * 3600000
+
+/** Ended less than 24h ago — the pin lives on as a story recap. */
+export function inMemoryWindow(event, now = new Date()) {
+  const end =
+    new Date(event.startsAt).getTime() + event.durationMinutes * 60000
+  return now.getTime() > end && now.getTime() - end < MEMORY_WINDOW_MS
+}
+
+/** Whole hours until the recap disappears (min 1 for display). */
+export function memoryHoursLeft(event, now = new Date()) {
+  const end =
+    new Date(event.startsAt).getTime() + event.durationMinutes * 60000
+  const left = end + MEMORY_WINDOW_MS - now.getTime()
+  return Math.max(1, Math.ceil(left / 3600000))
+}
+
 /** Tonight = starts today from 17:00, up to 04:00 tomorrow (or live now). */
 export function isTonight(event, now = new Date()) {
   if (isLive(event, now)) return true
