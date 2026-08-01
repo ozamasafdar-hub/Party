@@ -555,6 +555,8 @@ function toggleList() {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  /* stay clear of the right-side map controls + zoom buttons */
+  width: min(560px, calc(100vw - 136px));
 }
 
 .map-view__fab--limited {
@@ -566,7 +568,7 @@ function toggleList() {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: min(520px, calc(100vw - 24px));
+  width: 100%;
   padding: 10px 12px;
   border-radius: var(--radius-md);
   border: 1px solid rgba(167, 139, 250, 0.4);

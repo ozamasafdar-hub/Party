@@ -67,7 +67,7 @@ function pickMode(mode, label) {
 .time-pills {
   display: flex;
   gap: 8px;
-  max-width: calc(100vw - 24px);
+  max-width: 100%;
   overflow-x: auto;
   padding: 4px;
   scrollbar-width: none;
