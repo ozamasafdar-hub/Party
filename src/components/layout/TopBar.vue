@@ -201,6 +201,13 @@ function openNotif(notif) {
 .top-bar__bell-wrap {
   position: relative;
   flex-shrink: 0;
+  /* When the chips wrap to their own row (narrow screens) nothing fills
+     the first row — this keeps the bell + avatar pinned to the right. */
+  margin-left: auto;
+}
+
+.top-bar__signin {
+  margin-left: auto;
 }
 
 .top-bar__bell {
