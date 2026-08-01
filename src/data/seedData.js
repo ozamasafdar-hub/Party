@@ -59,7 +59,9 @@ export const SEED_EVENTS = [
     startsAt: at(3),
     durationMinutes: 120,
     maxCapacity: 8,
-    attendeeIds: ['u-hassan', 'u-mariam', 'u-omar']
+    attendeeIds: ['u-hassan', 'u-mariam', 'u-omar'],
+    coverUrl: 'https://picsum.photos/seed/wynbowl/800/450',
+    photoUrls: ['https://picsum.photos/seed/wynbowl/800/450']
   },
   {
     id: 'e-yacht',
@@ -76,7 +78,13 @@ export const SEED_EVENTS = [
     maxCapacity: 6,
     attendeeIds: ['u-noora', 'u-layla', 'u-hassan', 'u-yousef', 'u-mariam'],
     isProEvent: true,
-    featuredPin: true
+    featuredPin: true,
+    coverUrl: 'https://picsum.photos/seed/wynyacht/800/450',
+    photoUrls: [
+      'https://picsum.photos/seed/wynyacht/800/450',
+      'https://picsum.photos/seed/wynsea/800/450',
+      'https://picsum.photos/seed/wyndeck/800/450'
+    ]
   },
   {
     id: 'e-golf',
@@ -106,7 +114,9 @@ export const SEED_EVENTS = [
     startsAt: at(5, 30),
     durationMinutes: 150,
     maxCapacity: 10,
-    attendeeIds: ['u-layla', 'u-noora']
+    attendeeIds: ['u-layla', 'u-noora'],
+    coverUrl: 'https://picsum.photos/seed/wyncinema/800/450',
+    photoUrls: ['https://picsum.photos/seed/wyncinema/800/450']
   },
   {
     id: 'e-karak',
@@ -182,7 +192,12 @@ export const SEED_EVENTS = [
     durationMinutes: 150,
     maxCapacity: 8,
     attendeeIds: ['u-noora', 'u-mariam'],
-    ladiesOnly: true
+    ladiesOnly: true,
+    coverUrl: 'https://picsum.photos/seed/wynbrunch/800/450',
+    photoUrls: [
+      'https://picsum.photos/seed/wynbrunch/800/450',
+      'https://picsum.photos/seed/wynviews/800/450'
+    ]
   },
   {
     id: 'e-majlis',
@@ -205,6 +220,11 @@ export const SEED_EVENTS = [
     pricePerSpot: 50,
     locationBlurred: true,
     isProEvent: true,
-    requestedIds: ['u-yousef']
+    requestedIds: ['u-yousef'],
+    coverUrl: 'https://picsum.photos/seed/wynmajlis/800/450',
+    photoUrls: [
+      'https://picsum.photos/seed/wynmajlis/800/450',
+      'https://picsum.photos/seed/wyncards/800/450'
+    ]
   }
 ]
