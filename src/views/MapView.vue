@@ -181,6 +181,16 @@ const recapPrompt = computed(() => {
   )
 })
 
+/** Brand tap: reset filters and fly back to the full Qatar view. */
+function goHome() {
+  eventStore.setMapMode('live')
+  eventStore.setTimeWindow('all')
+  if (eventStore.activeCategory) eventStore.setCategory(eventStore.activeCategory)
+  eventStore.clearSelection()
+  showList.value = false
+  liveMap.value?.resetView()
+}
+
 /** A filter pill was tapped — fly the camera to the matching events. */
 async function onFilterChanged(label) {
   await nextTick()
@@ -326,7 +336,7 @@ function toggleList() {
       @fallback="onTileFallback"
     />
 
-    <TopBar @signin="openLogin('')" />
+    <TopBar @signin="openLogin('')" @home="goHome" />
 
     <!-- Floating map controls -->
     <div class="map-view__controls">

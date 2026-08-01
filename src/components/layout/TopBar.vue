@@ -13,7 +13,7 @@ const eventStore = useEventStore()
 const authStore = useAuthStore()
 const notifStore = useNotifStore()
 
-defineEmits(['signin'])
+defineEmits(['signin', 'home'])
 
 const showNotifs = ref(false)
 
@@ -30,15 +30,43 @@ function openNotif(notif) {
 
 <template>
   <header class="top-bar">
-    <div class="top-bar__brand glass-panel">
-      <span class="top-bar__logo">🗺️</span>
-      <div>
+    <button
+      class="top-bar__brand glass-panel"
+      title="Back to the full Qatar view"
+      @click="$emit('home')"
+    >
+      <svg class="top-bar__logo" viewBox="0 0 40 40" width="36" height="36" aria-hidden="true">
+        <defs>
+          <linearGradient id="wyn-pin" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#c62d55" />
+            <stop offset="1" stop-color="#8b1538" />
+          </linearGradient>
+          <linearGradient id="wyn-spark" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#f4e9c9" />
+            <stop offset="1" stop-color="#d4af6a" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M20 2.5C11.9 2.5 5.4 9 5.4 17.1c0 7.2 5.5 13 12.3 20.6 1.2 1.4 3.4 1.4 4.6 0C29.1 30.1 34.6 24.3 34.6 17.1 34.6 9 28.1 2.5 20 2.5Z"
+          fill="url(#wyn-pin)"
+          stroke="rgba(244, 233, 201, 0.9)"
+          stroke-width="1.6"
+        />
+        <path
+          d="M20 8.6l2.5 6 6 2.5-6 2.5-2.5 6-2.5-6-6-2.5 6-2.5z"
+          fill="url(#wyn-spark)"
+        />
+      </svg>
+      <div class="top-bar__brand-text">
         <div class="top-bar__name">
           WYN <span v-if="isDemoForced" class="top-bar__demo-badge">DEMO</span>
         </div>
-        <div class="top-bar__tagline">{{ eventStore.visibleEvents.length }} events live in Qatar</div>
+        <div class="top-bar__tagline">
+          <span class="top-bar__live-dot" />
+          {{ eventStore.visibleEvents.length }} live now · Qatar
+        </div>
       </div>
-    </div>
+    </button>
 
     <nav class="top-bar__filters" aria-label="Filter by category">
       <button
@@ -117,24 +145,86 @@ function openNotif(notif) {
 .top-bar__brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
+  gap: 9px;
+  padding: 8px 16px 8px 10px;
   flex-shrink: 0;
+  text-align: left;
+  border: 1px solid rgba(212, 175, 106, 0.28);
+  box-shadow:
+    0 4px 18px rgba(139, 21, 56, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+}
+
+.top-bar__brand:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 6px 22px rgba(139, 21, 56, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.top-bar__brand:active {
+  transform: translateY(0);
 }
 
 .top-bar__logo {
-  font-size: 22px;
+  display: block;
+  filter: drop-shadow(0 2px 6px rgba(139, 21, 56, 0.55));
+}
+
+.top-bar__brand-text {
+  min-width: 0;
 }
 
 .top-bar__name {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  line-height: 1.15;
+  background: linear-gradient(115deg, #ffffff 10%, #f4e9c9 45%, #d4af6a 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .top-bar__tagline {
-  font-size: 11.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   color: var(--text-secondary);
+}
+
+.top-bar__live-dot {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  flex-shrink: 0;
+}
+
+.top-bar__live-dot::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1px solid var(--success);
+  animation: live-ping 1.8s ease-out infinite;
+}
+
+@keyframes live-ping {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
 }
 
 .top-bar__demo-badge {
