@@ -55,8 +55,7 @@ onMounted(() => {
   map = L.map(mapEl.value, MAP_OPTIONS)
 
   applyBasemap(props.styleKey)
-
-  L.control.zoom({ position: 'bottomright' }).addTo(map)
+  // No zoom buttons — pinch, scroll and double-tap cover it
 
   // Nearby pins collapse into a count bubble; tapping zooms in, and pins
   // at the same spot fan out — no more unreachable overlapping markers
