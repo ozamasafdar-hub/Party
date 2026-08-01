@@ -7,7 +7,7 @@
  *   - Pick mode + CreateEventModal for dropping new event pins
  *   - Edit mode reusing the same modal for hosts
  */
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import LiveMap from '@/components/map/LiveMap.vue'
 import TopBar from '@/components/layout/TopBar.vue'
@@ -180,6 +180,17 @@ const recapPrompt = computed(() => {
     ) || null
   )
 })
+
+/** A filter pill was tapped — fly the camera to the matching events. */
+async function onFilterChanged(label) {
+  await nextTick()
+  const events = eventStore.mapEvents
+  if (events.length) {
+    liveMap.value?.fitToEvents(events)
+  } else {
+    notifStore.flash(`Nothing on for ${label} yet — try another filter`)
+  }
+}
 
 function onMemoryShared() {
   const event = uploadEvent.value
@@ -409,7 +420,10 @@ function toggleList() {
           </button>
         </div>
       </Transition>
-      <TimePills v-if="!pickMode && !pickingLocation && !selectedEvent && !showList" />
+      <TimePills
+        v-if="!pickMode && !pickingLocation && !selectedEvent && !showList"
+        @changed="onFilterChanged"
+      />
       <button
         v-if="!pickMode && !showCreateModal"
         class="btn-primary map-view__fab"

@@ -366,7 +366,18 @@ watch(
   }
 )
 
-defineExpose({ locateMe, resetView, clearDraftPin, setDraftPin })
+/** Fly the camera so every given event is on screen (filter changes). */
+function fitToEvents(events) {
+  if (!map || !events.length) return
+  if (events.length === 1) {
+    map.flyTo([events[0].lat, events[0].lng], Math.max(map.getZoom(), 13), { duration: 0.8 })
+    return
+  }
+  const bounds = L.latLngBounds(events.map((e) => [e.lat, e.lng]))
+  map.flyToBounds(bounds, { padding: [70, 70], maxZoom: 13, duration: 0.8 })
+}
+
+defineExpose({ locateMe, resetView, clearDraftPin, setDraftPin, fitToEvents })
 </script>
 
 <template>

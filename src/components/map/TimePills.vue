@@ -5,6 +5,8 @@
  */
 import { useEventStore } from '@/stores/eventStore'
 
+const emit = defineEmits(['changed'])
+
 const eventStore = useEventStore()
 
 const PILLS = [
@@ -14,6 +16,16 @@ const PILLS = [
   { key: 'tomorrow', label: '📅 Tomorrow' },
   { key: 'weekend', label: '🎉 Weekend' }
 ]
+
+function pickWindow(key, label) {
+  eventStore.setTimeWindow(key)
+  emit('changed', label)
+}
+
+function pickMode(mode, label) {
+  eventStore.setMapMode(mode)
+  emit('changed', label)
+}
 </script>
 
 <template>
@@ -24,7 +36,7 @@ const PILLS = [
         :key="pill.key"
         class="time-pills__pill"
         :class="{ 'time-pills__pill--active': eventStore.timeWindow === pill.key }"
-        @click="eventStore.setTimeWindow(pill.key)"
+        @click="pickWindow(pill.key, pill.label)"
       >
         {{ pill.label }}
       </button>
@@ -32,14 +44,19 @@ const PILLS = [
     <button
       v-else
       class="time-pills__pill"
-      @click="eventStore.setMapMode('live')"
+      @click="pickMode('live', '📍 Live events')"
     >
       📍 Live events
     </button>
     <button
       class="time-pills__pill time-pills__pill--memory"
       :class="{ 'time-pills__pill--memory-active': eventStore.mapMode === 'memories' }"
-      @click="eventStore.setMapMode(eventStore.mapMode === 'memories' ? 'live' : 'memories')"
+      @click="
+        pickMode(
+          eventStore.mapMode === 'memories' ? 'live' : 'memories',
+          eventStore.mapMode === 'memories' ? '📍 Live events' : '📸 Past 24h recaps'
+        )
+      "
     >
       📸 Past 24h recaps
     </button>
