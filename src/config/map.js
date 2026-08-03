@@ -50,43 +50,45 @@ const esri = (service, maxNativeZoom = 19) => ({
  * bundled vector chart. A chain is an array of stacked tile layers
  * (base first, optional label overlays after).
  */
+const osm = {
+  url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  options: {
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxNativeZoom: 19,
+    maxZoom: 20
+  }
+}
+
+/**
+ * `filter` is a CSS filter applied to the tile layer only (markers and
+ * overlays keep their own colors). It's how the flat CDN tiles get some
+ * warmth — richer water and greenery without hosting our own tile style.
+ */
 export const BASEMAPS = {
-  night: {
-    label: 'Night',
-    emoji: '🌙',
-    description: 'Dark streets — the WYN look',
-    sources: [
-      [carto('dark_all')],
-      // Esri's dark canvas (native tiles stop at z16; upscaled beyond)
-      [esri('Canvas/World_Dark_Gray_Base', 16), esri('Canvas/World_Dark_Gray_Reference', 16)]
-    ]
+  streets: {
+    label: 'Streets',
+    emoji: '🗺️',
+    description: 'Colourful streets and places',
+    filter: 'saturate(1.28) contrast(1.05) brightness(1.02)',
+    sources: [[carto('rastertiles/voyager')], [osm]]
   },
-  day: {
-    label: 'Day',
-    emoji: '☀️',
-    description: 'Bright streets and places',
+  minimal: {
+    label: 'Minimal',
+    emoji: '🤍',
+    description: 'Clean and quiet — pins pop',
+    filter: 'saturate(1.1) brightness(1.03)',
     sources: [
-      [carto('rastertiles/voyager')],
-      [
-        {
-          url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          options: {
-            attribution:
-              '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxNativeZoom: 19,
-            maxZoom: 20
-          }
-        }
-      ]
+      [carto('light_all')],
+      [esri('Canvas/World_Light_Gray_Base', 16), esri('Canvas/World_Light_Gray_Reference', 16)]
     ]
   },
   satellite: {
     label: 'Satellite',
     emoji: '🛰️',
     description: 'Aerial imagery with labels',
-    sources: [
-      [esri('World_Imagery'), esri('Reference/World_Boundaries_and_Places')]
-    ]
+    filter: 'saturate(1.2) contrast(1.06)',
+    sources: [[esri('World_Imagery'), esri('Reference/World_Boundaries_and_Places')]]
   },
   chart: {
     label: 'Chart',
@@ -97,4 +99,4 @@ export const BASEMAPS = {
   }
 }
 
-export const DEFAULT_BASEMAP = 'night'
+export const DEFAULT_BASEMAP = 'streets'

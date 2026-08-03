@@ -28,40 +28,40 @@ const CITY_LABELS = [
 ]
 
 const LAND_STYLE = {
-  fillColor: '#141d2c',
+  fillColor: '#f2ede2',
   fillOpacity: 1,
-  color: 'rgba(212, 175, 106, 0.4)',
+  color: 'rgba(190, 160, 100, 0.75)',
   weight: 1.1,
   interactive: false
 }
 
 const URBAN_STYLE = {
-  fillColor: '#1b2537',
+  fillColor: '#e6e0d2',
   fillOpacity: 1,
-  color: 'rgba(255, 255, 255, 0.04)',
+  color: 'rgba(0, 0, 0, 0.05)',
   weight: 1,
   interactive: false
 }
 
 const COUNTY_STYLE = {
   fill: false,
-  color: 'rgba(154, 165, 184, 0.16)',
+  color: 'rgba(90, 105, 130, 0.22)',
   weight: 1,
   interactive: false
 }
 
 const HOOD_STYLE = {
-  fillColor: 'rgba(255, 255, 255, 0.025)',
+  fillColor: 'rgba(255, 255, 255, 0.5)',
   fillOpacity: 1,
-  color: 'rgba(154, 165, 184, 0.28)',
+  color: 'rgba(90, 105, 130, 0.3)',
   weight: 1,
   interactive: false
 }
 
 const CAMPUS_STYLE = {
-  fillColor: 'rgba(56, 189, 248, 0.07)',
+  fillColor: 'rgba(45, 160, 120, 0.12)',
   fillOpacity: 1,
-  color: 'rgba(56, 189, 248, 0.35)',
+  color: 'rgba(45, 160, 120, 0.45)',
   weight: 1,
   dashArray: '4 3',
   interactive: false
@@ -76,7 +76,7 @@ function roadStyle(type, zoom) {
     : zoom >= 13 ? 2 : zoom >= 11 ? 1.8 : 1.2
   const opacity = zoom >= 13 ? 0.55 : 0.9
   return {
-    color: major ? '#7e8ca7' : '#525f78',
+    color: major ? '#f0b45e' : '#ffffff',
     weight,
     opacity: type === 'Unknown' ? opacity * 0.5 : opacity,
     lineCap: 'round',

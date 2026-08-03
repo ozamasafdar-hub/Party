@@ -95,6 +95,8 @@ function applyBasemap(key, sourceIndex = 0) {
   }
 
   const style = BASEMAPS[key] || BASEMAPS[DEFAULT_BASEMAP]
+  // Warm up the flat CDN tiles (water, greenery) without self-hosting a style
+  mapEl.value.style.setProperty('--tile-filter', style.filter || 'none')
   if (style.vector || sourceIndex >= style.sources.length) {
     vectorCleanup = addVectorBasemap(map)
     if (!style.vector) emit('fallback', key)
@@ -388,6 +390,12 @@ defineExpose({ locateMe, resetView, clearDraftPin, setDraftPin, fitToEvents })
   position: absolute;
   inset: 0;
   z-index: 0;
+  background: #dfe7ee; /* sea tone behind the tiles while they load */
+}
+
+/* Tiles only — markers, circles and labels keep their own colors */
+.live-map :deep(.leaflet-tile-pane) {
+  filter: var(--tile-filter, none);
 }
 
 .live-map :deep(.event-tooltip) {
@@ -417,14 +425,14 @@ defineExpose({ locateMe, resetView, clearDraftPin, setDraftPin, fitToEvents })
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(154, 165, 184, 0.75);
-  text-shadow: 0 1px 6px rgba(10, 14, 23, 0.9);
+  color: rgba(70, 84, 105, 0.85);
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.85);
   white-space: nowrap;
 }
 
 .live-map :deep(.place-label__text--major) {
   font-size: 13px;
-  color: rgba(244, 246, 251, 0.85);
+  color: rgba(32, 44, 62, 0.92);
   letter-spacing: 0.18em;
 }
 
@@ -432,7 +440,7 @@ defineExpose({ locateMe, resetView, clearDraftPin, setDraftPin, fitToEvents })
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.1em;
-  color: rgba(154, 165, 184, 0.6);
+  color: rgba(90, 105, 130, 0.75);
 }
 
 .live-map :deep(.place-label__text--hood) {
@@ -440,7 +448,7 @@ defineExpose({ locateMe, resetView, clearDraftPin, setDraftPin, fitToEvents })
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: none;
-  color: rgba(176, 188, 208, 0.78);
+  color: rgba(80, 95, 118, 0.8);
 }
 
 .live-map :deep(.event-cluster__badge) {
