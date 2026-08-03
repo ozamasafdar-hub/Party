@@ -39,6 +39,10 @@ export const useNotifStore = defineStore('notifications', {
       })
     },
 
+    clearAll() {
+      this.items = []
+    },
+
     /** Transient on-map confirmation banner ("You're in — see you there!"). */
     flash(text) {
       this.toast = text

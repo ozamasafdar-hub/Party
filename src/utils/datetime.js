@@ -106,6 +106,17 @@ export function formatCountdown(iso, now = new Date()) {
   return diff > 0 ? `Starts in ${span}` : `Started ${span} ago`
 }
 
+/** "just now" / "5m ago" / "2h ago" / "yesterday" — for notification rows. */
+export function timeAgo(iso, now = new Date()) {
+  const diff = now.getTime() - new Date(iso).getTime()
+  if (diff < 60000) return 'just now'
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  return hours < 48 ? 'yesterday' : `${Math.floor(hours / 24)}d ago`
+}
+
 /** Rounds "now" up to the next half hour — friendly default for new events. */
 export function nextHalfHourISO() {
   const d = new Date()
