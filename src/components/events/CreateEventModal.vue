@@ -224,8 +224,19 @@ async function submit() {
 <template>
   <div class="modal-backdrop" @click.self="emit('close')">
     <form class="create-modal glass-panel" @submit.prevent="submit">
-      <h2 class="create-modal__title">{{ isEditing ? 'Edit event' : 'Create an event' }}</h2>
+      <header class="create-modal__head">
+        <h2 class="create-modal__title">{{ isEditing ? 'Edit event' : 'Create an event' }}</h2>
+        <button
+          type="button"
+          class="create-modal__close"
+          aria-label="Close"
+          @click="emit('close')"
+        >
+          ✕
+        </button>
+      </header>
 
+      <div class="create-modal__body">
       <label class="field-label" for="ev-title">Event title</label>
       <input
         id="ev-title"
@@ -257,7 +268,10 @@ async function submit() {
           :style="form.category === key ? { background: cat.color, borderColor: cat.color } : {}"
           @click="form.category = key"
         >
-          {{ cat.label }}
+          <svg viewBox="0 0 24 24" class="create-modal__cat-glyph" aria-hidden="true">
+            <path :d="cat.glyph" :fill="form.category === key ? '#0b0f19' : cat.color" />
+          </svg>
+          <span class="create-modal__cat-label">{{ cat.label }}</span>
         </button>
       </div>
 
@@ -446,6 +460,7 @@ async function submit() {
       </div>
 
       <p v-if="error" class="create-modal__error">{{ error }}</p>
+      </div>
 
       <div class="create-modal__actions">
         <button type="button" class="btn-ghost" @click="emit('close')">Cancel</button>
@@ -512,15 +527,49 @@ async function submit() {
 }
 
 .create-modal {
+  display: flex;
+  flex-direction: column;
   width: min(480px, 100%);
   max-height: calc(100vh - 48px);
+  overflow: hidden;
+}
+
+/* Header and footer stay put; only the fields scroll */
+.create-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 22px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.create-modal__body {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 26px;
+  padding: 4px 22px 18px;
+  overscroll-behavior: contain;
 }
 
 .create-modal__title {
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 700;
+}
+
+.create-modal__close {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.create-modal__close:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--text-primary);
 }
 
 .create-modal__coords {
@@ -554,21 +603,40 @@ async function submit() {
   min-height: 72px;
 }
 
+/* Icon grid — same glyphs as the map pins, four per row */
 .create-modal__categories {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
 }
 
 .create-modal__cat {
-  padding: 8px 14px;
-  border-radius: 999px;
-  font-size: 12.5px;
-  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  padding: 10px 4px 8px;
+  border-radius: var(--radius-md);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
   color: var(--text-secondary);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-subtle);
   transition: all 0.15s ease;
+}
+
+.create-modal__cat:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.create-modal__cat-glyph {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
 }
 
 .create-modal__cat--active {
@@ -853,12 +921,58 @@ async function submit() {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 22px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--border-subtle);
+  background: rgba(13, 18, 30, 0.5);
 }
 
-@media (max-width: 520px) {
+@media (max-width: 560px) {
+  /* Full-screen sheet on phones: no wasted margins, header and the
+     publish button always reachable without scrolling */
+  .modal-backdrop {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .create-modal {
+    width: 100%;
+    max-height: none;
+    height: 100dvh;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  .create-modal__head {
+    padding: max(14px, env(safe-area-inset-top)) 16px 12px;
+  }
+
+  .create-modal__body {
+    padding: 4px 16px 16px;
+  }
+
+  .create-modal__actions {
+    padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+  }
+
+  .create-modal__actions > .btn-primary {
+    flex: 1;
+  }
+
   .create-modal__row {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .create-modal__row > div:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .create-modal .field-label {
+    margin-top: 12px;
+  }
+
+  .create-modal__extras {
+    padding: 12px;
   }
 }
 </style>
