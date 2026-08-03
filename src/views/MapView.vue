@@ -336,7 +336,7 @@ function toggleList() {
       @fallback="onTileFallback"
     />
 
-    <TopBar @signin="openLogin('')" @home="goHome" />
+    <TopBar @signin="openLogin('')" @home="goHome" @filter-changed="onFilterChanged" />
 
     <!-- Floating map controls -->
     <div class="map-view__controls">

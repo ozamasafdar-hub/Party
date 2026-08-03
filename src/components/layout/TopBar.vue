@@ -14,7 +14,12 @@ const eventStore = useEventStore()
 const authStore = useAuthStore()
 const notifStore = useNotifStore()
 
-defineEmits(['signin', 'home'])
+const emit = defineEmits(['signin', 'home', 'filter-changed'])
+
+function pickCategory(key, label) {
+  eventStore.setCategory(key)
+  emit('filter-changed', eventStore.activeCategory ? label : 'All')
+}
 
 const showNotifs = ref(false)
 
@@ -52,12 +57,18 @@ function openNotif(notif) {
       <button
         v-for="(cat, key) in CATEGORIES"
         :key="key"
-        class="top-bar__chip glass-panel"
-        :class="{ 'top-bar__chip--active': eventStore.activeCategory === key }"
-        :style="eventStore.activeCategory === key ? { background: cat.color, color: '#0b0f19' } : {}"
-        @click="eventStore.setCategory(key)"
+        class="top-bar__cat"
+        :class="{ 'top-bar__cat--active': eventStore.activeCategory === key }"
+        :style="eventStore.activeCategory === key ? { background: cat.color, borderColor: cat.color } : {}"
+        :title="cat.label"
+        @click="pickCategory(key, cat.label)"
       >
-        {{ cat.label }}
+        <svg viewBox="0 0 24 24" class="top-bar__cat-glyph" aria-hidden="true">
+          <path :d="cat.glyph" :fill="eventStore.activeCategory === key ? '#0b0f19' : cat.color" />
+        </svg>
+        <span v-if="eventStore.activeCategory === key" class="top-bar__cat-label">
+          {{ cat.label }}
+        </span>
       </button>
     </nav>
 
@@ -238,22 +249,44 @@ function openNotif(notif) {
   display: none;
 }
 
-.top-bar__chip {
-  padding: 10px 15px;
+/* Compact icon chips — same glyphs and colors as the map pins */
+.top-bar__cat {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 40px;
+  min-width: 40px;
+  padding: 0 9px;
   border-radius: 999px;
-  font-size: 12.5px;
-  font-weight: 600;
+  background: rgba(13, 18, 30, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(8px);
+  flex-shrink: 0;
+  transition: all 0.18s ease;
+}
+
+.top-bar__cat:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.top-bar__cat--active {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.top-bar__cat-glyph {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.top-bar__cat-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #0b0f19;
   white-space: nowrap;
-  color: var(--text-secondary);
-  transition: all 0.15s ease;
-}
-
-.top-bar__chip:hover {
-  color: var(--text-primary);
-}
-
-.top-bar__chip--active {
-  font-weight: 700;
+  padding-right: 3px;
 }
 
 .top-bar__profile {
