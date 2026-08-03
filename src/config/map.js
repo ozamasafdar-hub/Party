@@ -79,7 +79,11 @@ export const BASEMAPS = {
     label: 'Minimal',
     emoji: '🤍',
     description: 'Clean and quiet — pins pop',
-    filter: 'saturate(1.1) brightness(1.03)',
+    // Positron's water is almost grey. Land and roads there are neutral,
+    // and saturating a neutral colour leaves it neutral — so a strong
+    // saturate lifts the sea to blue (#BCDFEE) while the land only warms
+    // to cream and the roads stay pure white.
+    filter: 'saturate(5) hue-rotate(-9deg)',
     sources: [
       [carto('light_all')],
       [esri('Canvas/World_Light_Gray_Base', 16), esri('Canvas/World_Light_Gray_Reference', 16)]
