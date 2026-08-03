@@ -56,6 +56,52 @@ const form = reactive({
 const busy = ref(false)
 const error = ref('')
 
+/* --- three-step wizard ---------------------------------------------------- */
+
+const STEPS = [
+  { n: 1, label: 'Details' },
+  { n: 2, label: 'When & where' },
+  { n: 3, label: 'Options' }
+]
+const step = ref(1)
+
+/** Returns an error message for the current step, or '' when it's valid. */
+function validateStep(n) {
+  if (n === 1) {
+    if (!form.title.trim()) return 'Give your event a title.'
+  }
+  if (n === 2) {
+    if (!form.locationName.trim()) return 'Name the place (e.g. "B Square Mall").'
+    if (!pin.value) return 'Set the location — tap "Pick on map".'
+    if (Number.isNaN(new Date(form.startsAtLocal).getTime())) {
+      return 'Pick a valid date and time.'
+    }
+  }
+  return ''
+}
+
+function nextStep() {
+  const problem = validateStep(step.value)
+  if (problem) {
+    error.value = problem
+    return
+  }
+  error.value = ''
+  step.value = Math.min(STEPS.length, step.value + 1)
+}
+
+function prevStep() {
+  error.value = ''
+  step.value = Math.max(1, step.value - 1)
+}
+
+/** Step chips: you can always jump back, forward only through Next. */
+function goToStep(n) {
+  if (n >= step.value) return
+  error.value = ''
+  step.value = n
+}
+
 /* --- Host Pro gates ------------------------------------------------------- */
 
 const { isPro, maxCapacity, canCharge, canFeaturePin, canReliabilityLock } =
@@ -170,12 +216,21 @@ const DURATIONS = [
 ]
 
 async function submit() {
+  // Enter inside a field shouldn't publish from an earlier step
+  if (step.value < STEPS.length) {
+    nextStep()
+    return
+  }
   error.value = ''
-  if (!form.title.trim()) return (error.value = 'Give your event a title.')
-  if (!form.locationName.trim()) return (error.value = 'Name the place (e.g. "B Square Mall").')
-  if (!pin.value) return (error.value = 'Set the location — tap "Pick on map".')
+  for (const s of STEPS) {
+    const problem = validateStep(s.n)
+    if (problem) {
+      step.value = s.n
+      error.value = problem
+      return
+    }
+  }
   const startsAt = new Date(form.startsAtLocal)
-  if (Number.isNaN(startsAt.getTime())) return (error.value = 'Pick a valid date and time.')
 
   // Blurred events publish offset coordinates; the exact pin is kept
   // privately and revealed only to the host and confirmed guests.
@@ -225,18 +280,38 @@ async function submit() {
   <div class="modal-backdrop" @click.self="emit('close')">
     <form class="create-modal glass-panel" @submit.prevent="submit">
       <header class="create-modal__head">
-        <h2 class="create-modal__title">{{ isEditing ? 'Edit event' : 'Create an event' }}</h2>
-        <button
-          type="button"
-          class="create-modal__close"
-          aria-label="Close"
-          @click="emit('close')"
-        >
-          ✕
-        </button>
+        <div class="create-modal__head-row">
+          <h2 class="create-modal__title">{{ isEditing ? 'Edit event' : 'Create an event' }}</h2>
+          <button
+            type="button"
+            class="create-modal__close"
+            aria-label="Close"
+            @click="emit('close')"
+          >
+            ✕
+          </button>
+        </div>
+        <nav class="create-modal__steps" aria-label="Progress">
+          <button
+            v-for="s in STEPS"
+            :key="s.n"
+            type="button"
+            class="create-modal__step"
+            :class="{
+              'create-modal__step--active': step === s.n,
+              'create-modal__step--done': step > s.n
+            }"
+            :disabled="s.n >= step"
+            @click="goToStep(s.n)"
+          >
+            <span class="create-modal__step-dot">{{ step > s.n ? '✓' : s.n }}</span>
+            <span class="create-modal__step-label">{{ s.label }}</span>
+          </button>
+        </nav>
       </header>
 
       <div class="create-modal__body">
+      <template v-if="step === 1">
       <label class="field-label" for="ev-title">Event title</label>
       <input
         id="ev-title"
@@ -313,6 +388,9 @@ async function submit() {
         />
       </div>
 
+      </template>
+
+      <template v-if="step === 2">
       <label class="field-label" for="ev-place">Place name</label>
       <input
         id="ev-place"
@@ -369,6 +447,9 @@ async function submit() {
         🔒 Up to {{ FREE_LIMITS.maxCapacity }} guests on the free plan — upgrade to Host Pro to expand
       </button>
 
+      </template>
+
+      <template v-if="step === 3">
       <label class="field-label">Host controls</label>
       <div class="create-modal__extras">
         <label class="create-modal__toggle">
@@ -459,12 +540,32 @@ async function submit() {
         </label>
       </div>
 
+      </template>
+
       <p v-if="error" class="create-modal__error">{{ error }}</p>
       </div>
 
       <div class="create-modal__actions">
-        <button type="button" class="btn-ghost" @click="emit('close')">Cancel</button>
-        <button type="submit" class="btn-primary" :disabled="busy">
+        <button
+          v-if="step === 1"
+          type="button"
+          class="btn-ghost create-modal__back"
+          @click="emit('close')"
+        >
+          Cancel
+        </button>
+        <button v-else type="button" class="btn-ghost create-modal__back" @click="prevStep">
+          ← Back
+        </button>
+        <button
+          v-if="step < STEPS.length"
+          type="button"
+          class="btn-primary create-modal__next"
+          @click="nextStep"
+        >
+          Next →
+        </button>
+        <button v-else type="submit" class="btn-primary create-modal__next" :disabled="busy">
           {{ busy ? 'Saving…' : isEditing ? 'Save changes' : 'Publish to map' }}
         </button>
       </div>
@@ -536,12 +637,84 @@ async function submit() {
 
 /* Header and footer stay put; only the fields scroll */
 .create-modal__head {
+  padding: 18px 22px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.create-modal__head-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 20px 22px 12px;
-  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Step chips */
+.create-modal__steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.create-modal__step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 6px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  transition: all 0.18s ease;
+  min-width: 0;
+}
+
+.create-modal__step-dot {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-secondary);
+}
+
+.create-modal__step-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.create-modal__step--active {
+  flex: 2.4; /* room for the label; the other two shrink to their dots */
+  color: var(--text-primary);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);
+  border-color: transparent;
+}
+
+.create-modal__step--active .create-modal__step-dot {
+  background: rgba(11, 15, 25, 0.35);
+  color: #fff;
+}
+
+.create-modal__step--done {
+  color: var(--success);
+  border-color: rgba(45, 212, 160, 0.4);
+  background: rgba(45, 212, 160, 0.1);
+  cursor: pointer;
+}
+
+.create-modal__step--done .create-modal__step-dot {
+  background: rgba(45, 212, 160, 0.25);
+  color: var(--success);
 }
 
 .create-modal__body {
@@ -896,6 +1069,8 @@ async function submit() {
   background: rgba(212, 175, 106, 0.16);
 }
 
+/* Specific enough to beat `.create-modal__toggle em { display: block }` */
+.create-modal__toggle .create-modal__pro-tag,
 .create-modal__pro-tag {
   display: inline-block;
   margin-left: 6px;
@@ -955,8 +1130,16 @@ async function submit() {
     padding: 12px 16px max(12px, env(safe-area-inset-bottom));
   }
 
-  .create-modal__actions > .btn-primary {
+  .create-modal__next {
     flex: 1;
+  }
+
+  .create-modal__step-label {
+    display: none;
+  }
+
+  .create-modal__step--active .create-modal__step-label {
+    display: inline;
   }
 
   .create-modal__row {
