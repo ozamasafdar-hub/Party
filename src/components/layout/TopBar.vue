@@ -32,18 +32,18 @@ function openNotif(notif) {
 <template>
   <header class="top-bar">
     <button
-      class="top-bar__brand glass-panel"
+      class="top-bar__brand"
       title="Back to the full Qatar view"
       @click="$emit('home')"
     >
-      <span class="top-bar__logo"><WynLogo :size="34" /></span>
+      <span class="top-bar__logo"><WynLogo :size="42" /></span>
       <div class="top-bar__brand-text">
         <div class="top-bar__name">
           WYN <span v-if="isDemoForced" class="top-bar__demo-badge">DEMO</span>
         </div>
         <div class="top-bar__tagline">
           <span class="top-bar__live-dot" />
-          {{ eventStore.visibleEvents.length }} live now · Qatar
+          {{ eventStore.visibleEvents.length }} live · Qatar
         </div>
       </div>
     </button>
@@ -122,61 +122,67 @@ function openNotif(notif) {
   pointer-events: auto;
 }
 
+/* Floating lockup — the mark sits straight on the map, no box */
 .top-bar__brand {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 8px 16px 8px 10px;
+  gap: 10px;
+  padding: 2px;
   flex-shrink: 0;
   text-align: left;
-  border: 1px solid rgba(212, 175, 106, 0.28);
-  box-shadow:
-    0 4px 18px rgba(139, 21, 56, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  background: none;
+  border: none;
+  transition: transform 0.15s ease;
   cursor: pointer;
 }
 
 .top-bar__brand:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    0 6px 22px rgba(139, 21, 56, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px) scale(1.02);
 }
 
 .top-bar__brand:active {
-  transform: translateY(0);
+  transform: scale(0.98);
 }
 
 .top-bar__logo {
   display: block;
   flex-shrink: 0;
-  filter: drop-shadow(0 2px 7px rgba(124, 21, 51, 0.65));
+  filter: drop-shadow(0 5px 12px rgba(0, 0, 0, 0.55)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4));
 }
 
 .top-bar__brand-text {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
 }
 
 .top-bar__name {
-  font-size: 17px;
+  font-size: 21px;
   font-weight: 900;
-  letter-spacing: 0.09em;
-  line-height: 1.15;
-  background: linear-gradient(115deg, #ffffff 10%, #f4e9c9 45%, #d4af6a 90%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  letter-spacing: 0.13em;
+  line-height: 1;
+  color: #ffffff;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.85),
+    0 3px 14px rgba(0, 0, 0, 0.55);
 }
 
 .top-bar__tagline {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--text-secondary);
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  background: rgba(11, 15, 25, 0.72);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #e6eaf2;
+  white-space: nowrap;
 }
 
 .top-bar__live-dot {
