@@ -10,7 +10,7 @@ import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useFollowStore } from '@/stores/followStore'
 import { categoryOf } from '@/config/categories'
-import { formatWhen, isLive } from '@/utils/datetime'
+import { formatWhen, formatDay, isLive } from '@/utils/datetime'
 import { distanceKm, formatDistance } from '@/utils/geo'
 
 const emit = defineEmits(['close', 'select', 'need-location'])
@@ -48,6 +48,39 @@ const upcoming = computed(() => {
   }
   return events.sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt))
 })
+
+/** Rows grouped under day headers (flat when sorting by distance). */
+const grouped = computed(() => {
+  if (sortNearest.value && eventStore.userLocation) {
+    return [{ label: '📏 Nearest first', events: upcoming.value }]
+  }
+  const groups = []
+  for (const event of upcoming.value) {
+    const label = formatDay(event.startsAt)
+    const last = groups[groups.length - 1]
+    if (last && last.label === label) last.events.push(event)
+    else groups.push({ label, events: [event] })
+  }
+  return groups
+})
+
+/* Capacity ring around the guest count */
+const RING_CIRC = 2 * Math.PI * 15.5
+
+function ringDash(event) {
+  const pct = Math.min(1, event.attendeeIds.length / event.maxCapacity)
+  return `${RING_CIRC * pct} ${RING_CIRC}`
+}
+
+function ringColor(event) {
+  return event.attendeeIds.length >= event.maxCapacity
+    ? 'var(--danger)'
+    : 'var(--success)'
+}
+
+function hideBrokenImage(event) {
+  event.target.style.display = 'none' // category glyph shows through
+}
 </script>
 
 <template>
@@ -91,28 +124,76 @@ const upcoming = computed(() => {
       Nothing here right now — try another filter, or be the first to create an event!
     </p>
 
-    <button
-      v-for="event in upcoming"
-      :key="event.id"
-      class="event-list__row"
-      @click="emit('select', event.id)"
-    >
-      <span class="event-list__dot" :style="{ background: categoryOf(event.category).color }" />
-      <span class="event-list__body">
-        <span class="event-list__row-title">
-          <template v-if="followStore.isFriendEvent(event)">⭐ </template>{{ event.title }}
-          <span v-if="isLive(event)" class="event-list__live">LIVE</span>
+    <template v-for="group in grouped" :key="group.label">
+      <div class="event-list__day">{{ group.label }}</div>
+      <button
+        v-for="event in group.events"
+        :key="event.id"
+        class="event-list__row"
+        @click="emit('select', event.id)"
+      >
+        <span
+          class="event-list__thumb"
+          :style="{ background: `${categoryOf(event.category).color}22` }"
+        >
+          <svg viewBox="0 0 24 24" class="event-list__thumb-glyph" aria-hidden="true">
+            <path :d="categoryOf(event.category).glyph" :fill="categoryOf(event.category).color" />
+          </svg>
+          <img
+            v-if="event.coverUrl"
+            :src="event.coverUrl"
+            alt=""
+            class="event-list__thumb-img"
+            loading="lazy"
+            @error="hideBrokenImage"
+          />
+          <span
+            v-if="isLive(event)"
+            class="event-list__thumb-live"
+            title="Happening now"
+          />
         </span>
-        <span class="event-list__meta">
-          {{ event.locationName }} · {{ formatWhen(event.startsAt)
-          }}<template v-if="distanceTo(event) !== null">
-            · {{ formatDistance(distanceTo(event)) }}</template>
+        <span class="event-list__body">
+          <span class="event-list__row-title">
+            <template v-if="followStore.isFriendEvent(event)">⭐ </template>{{ event.title }}
+          </span>
+          <span
+            v-if="isLive(event) || event.featuredPin || Number(event.pricePerSpot) > 0 || event.ladiesOnly || event.approvalMode"
+            class="event-list__badges"
+          >
+            <span v-if="isLive(event)" class="event-list__badge event-list__badge--live">● LIVE</span>
+            <span v-if="event.featuredPin" class="event-list__badge event-list__badge--gold">✨ Featured</span>
+            <span v-if="Number(event.pricePerSpot) > 0" class="event-list__badge event-list__badge--gold">
+              QAR {{ Number(event.pricePerSpot).toFixed(0) }}
+            </span>
+            <span v-if="event.ladiesOnly" class="event-list__badge event-list__badge--ladies">🚺</span>
+            <span v-if="event.approvalMode" class="event-list__badge">✋ approval</span>
+          </span>
+          <span class="event-list__meta">
+            {{ event.locationName }} · {{ formatWhen(event.startsAt)
+            }}<template v-if="distanceTo(event) !== null">
+              · {{ formatDistance(distanceTo(event)) }}</template>
+          </span>
         </span>
-      </span>
-      <span class="event-list__count">
-        {{ event.attendeeIds.length }}/{{ event.maxCapacity }}
-      </span>
-    </button>
+        <svg class="event-list__ring" viewBox="0 0 40 40" aria-hidden="true">
+          <circle cx="20" cy="20" r="15.5" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="3.4" />
+          <circle
+            cx="20"
+            cy="20"
+            r="15.5"
+            fill="none"
+            :stroke="ringColor(event)"
+            stroke-width="3.4"
+            stroke-linecap="round"
+            :stroke-dasharray="ringDash(event)"
+            transform="rotate(-90 20 20)"
+          />
+          <text x="20" y="23.4" text-anchor="middle" class="event-list__ring-text">
+            {{ event.attendeeIds.length }}/{{ event.maxCapacity }}
+          </text>
+        </svg>
+      </button>
+    </template>
   </aside>
 </template>
 
@@ -183,26 +264,73 @@ const upcoming = computed(() => {
   line-height: 1.5;
 }
 
+.event-list__day {
+  margin: 12px 2px 6px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.event-list__day:first-of-type {
+  margin-top: 4px;
+}
+
 .event-list__row {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
   text-align: left;
-  padding: 11px 10px;
-  border-radius: var(--radius-sm);
-  transition: background 0.15s ease;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 
 .event-list__row:hover {
   background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border-subtle);
+  transform: translateX(3px);
 }
 
-.event-list__dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+.event-list__thumb {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 13px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.event-list__thumb-glyph {
+  width: 22px;
+  height: 22px;
+}
+
+.event-list__thumb-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.event-list__thumb-live {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--success);
+  border: 2px solid rgba(11, 15, 25, 0.9);
+  animation: live-blink 1.6s ease-in-out infinite;
 }
 
 .event-list__body {
@@ -210,38 +338,77 @@ const upcoming = computed(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .event-list__row-title {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 650;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.event-list__live {
-  margin-left: 6px;
+.event-list__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.event-list__badge {
+  padding: 1px 7px;
+  border-radius: 999px;
   font-size: 9.5px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.event-list__badge--live {
+  background: rgba(45, 212, 160, 0.14);
+  border-color: rgba(45, 212, 160, 0.45);
   color: var(--success);
 }
 
+.event-list__badge--gold {
+  background: rgba(212, 175, 106, 0.13);
+  border-color: rgba(212, 175, 106, 0.42);
+  color: var(--gold);
+}
+
+.event-list__badge--ladies {
+  background: rgba(244, 114, 182, 0.13);
+  border-color: rgba(244, 114, 182, 0.45);
+  color: #f9a8d4;
+}
+
 .event-list__meta {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.event-list__count {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--text-secondary);
+.event-list__ring {
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
+}
+
+.event-list__ring-text {
+  font-size: 9.5px;
+  font-weight: 700;
+  fill: var(--text-primary);
   font-variant-numeric: tabular-nums;
+}
+
+@keyframes live-blink {
+  50% {
+    opacity: 0.45;
+  }
 }
 </style>
