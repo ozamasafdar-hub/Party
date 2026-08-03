@@ -1,12 +1,12 @@
 import L from 'leaflet'
-import { categoryOf } from '@/config/categories'
+import { categoryOf, pinColorOf } from '@/config/categories'
 
 /**
  * Builds a Leaflet divIcon for an event pin.
  *
  * Pins are pure inline SVG (no raster images), so they render pixel-perfect
  * on every display density — retina, 4K, UHD. Each pin carries:
- *   - the category color + glyph
+ *   - the host's chosen colour (or the category's) + the category glyph
  *   - an attendee-count badge
  *   - a pulsing ring when the event is happening right now
  */
@@ -41,7 +41,10 @@ export function buildEventIcon(
   event,
   { live = false, full = false, selected = false, friend = false } = {}
 ) {
-  const { color, glyph } = categoryOf(event.category)
+  // Hosts may recolour their pin; the glyph always stays the category's so
+  // the map is still readable at a glance.
+  const color = pinColorOf(event)
+  const { glyph } = categoryOf(event.category)
   const featured = !!event.featuredPin
   const badgeColor = full ? '#f4587a' : '#2dd4a0'
   const count = event.attendeeIds.length

@@ -218,6 +218,7 @@ export const SEED_EVENTS = [
     description:
       'Free amphitheatre concert at Katara Cultural Village. Meeting by the pigeon towers.',
     category: 'culture',
+    pinColor: '#A78BFA', // host picked their own pin colour
     locationName: 'Katara Amphitheatre',
     lat: 25.3594,
     lng: 51.5257,
@@ -233,6 +234,7 @@ export const SEED_EVENTS = [
     description:
       '5k easy pace around Aspire Park lake, coffee after at the Torch café.',
     category: 'sports',
+    pinColor: '#14B8A6',
     locationName: 'Aspire Park',
     lat: 25.2632,
     lng: 51.4479,

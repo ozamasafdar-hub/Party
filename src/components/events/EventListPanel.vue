@@ -9,7 +9,7 @@ import { computed, ref } from 'vue'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useFollowStore } from '@/stores/followStore'
-import { categoryOf } from '@/config/categories'
+import { categoryOf, pinColorOf } from '@/config/categories'
 import { formatWhen, formatDay, isLive } from '@/utils/datetime'
 import { distanceKm, formatDistance } from '@/utils/geo'
 
@@ -134,10 +134,10 @@ function hideBrokenImage(event) {
       >
         <span
           class="event-list__thumb"
-          :style="{ background: `${categoryOf(event.category).color}22` }"
+          :style="{ background: `${pinColorOf(event)}22` }"
         >
           <svg viewBox="0 0 24 24" class="event-list__thumb-glyph" aria-hidden="true">
-            <path :d="categoryOf(event.category).glyph" :fill="categoryOf(event.category).color" />
+            <path :d="categoryOf(event.category).glyph" :fill="pinColorOf(event)" />
           </svg>
           <img
             v-if="event.coverUrl"

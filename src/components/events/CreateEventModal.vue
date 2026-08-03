@@ -7,7 +7,7 @@
  * prefilled from the existing event, location re-pickable.
  */
 import { computed, reactive, ref, watch } from 'vue'
-import { CATEGORIES } from '@/config/categories'
+import { CATEGORIES, PIN_COLORS, categoryOf, pinColorOf } from '@/config/categories'
 import { nextHalfHourISO, toLocalInputValue } from '@/utils/datetime'
 import { resizeCoverFile } from '@/utils/image'
 import { blurCoords } from '@/utils/geo'
@@ -50,8 +50,16 @@ const form = reactive({
   ladiesOnly: props.event?.ladiesOnly ?? false,
   locationBlurred: props.event?.locationBlurred ?? false,
   featuredPin: props.event?.featuredPin ?? false,
-  proOnly: props.event?.proOnly ?? false
+  proOnly: props.event?.proOnly ?? false,
+  pinColor: props.event?.pinColor ?? '' // '' = match the category
 })
+
+/* Pin colour: hosts pick one, or leave it matching the category. The
+ * preview mirrors exactly what eventMarker.js draws on the map. */
+const previewPin = computed(() =>
+  pinColorOf({ pinColor: form.pinColor, category: form.category })
+)
+const previewGlyph = computed(() => categoryOf(form.category).glyph)
 
 const busy = ref(false)
 const error = ref('')
@@ -259,7 +267,8 @@ async function submit() {
     exactLat: blur ? pin.value.lat : null,
     exactLng: blur ? pin.value.lng : null,
     featuredPin: form.featuredPin && isPro.value,
-    proOnly: form.proOnly && isPro.value
+    proOnly: form.proOnly && isPro.value,
+    pinColor: form.pinColor || null
   }
 
   busy.value = true
@@ -349,6 +358,55 @@ async function submit() {
           <span class="create-modal__cat-label">{{ cat.label }}</span>
         </button>
       </div>
+
+      <label class="field-label">
+        Pin colour <span class="create-modal__optional">(how your event looks on the map)</span>
+      </label>
+      <div class="create-modal__pin-row">
+        <div class="create-modal__pin-preview" aria-hidden="true">
+          <svg viewBox="0 0 46 60" width="38" height="50">
+            <path
+              d="M23 2C11.4 2 2 11.2 2 22.6 2 33 10 41.4 19.6 52.8c1.8 2.1 5 2.1 6.8 0C36 41.4 44 33 44 22.6 44 11.2 34.6 2 23 2Z"
+              :fill="previewPin"
+              stroke="rgba(255,255,255,0.85)"
+              stroke-width="1.5"
+            />
+            <circle cx="23" cy="21" r="14" fill="rgba(11,15,25,0.28)" />
+            <g transform="translate(13.4,11.4) scale(0.8)">
+              <path :d="previewGlyph" fill="#ffffff" />
+            </g>
+          </svg>
+        </div>
+        <div class="create-modal__swatches">
+          <button
+            type="button"
+            class="create-modal__swatch create-modal__swatch--auto"
+            :class="{ 'create-modal__swatch--on': !form.pinColor }"
+            title="Match category"
+            aria-label="Match category colour"
+            :aria-pressed="!form.pinColor"
+            @click="form.pinColor = ''"
+          >
+            <span class="create-modal__swatch-auto">A</span>
+          </button>
+          <button
+            v-for="c in PIN_COLORS"
+            :key="c.key"
+            type="button"
+            class="create-modal__swatch"
+            :class="{ 'create-modal__swatch--on': form.pinColor === c.hex }"
+            :style="{ background: c.hex }"
+            :title="c.label"
+            :aria-label="c.label"
+            :aria-pressed="form.pinColor === c.hex"
+            @click="form.pinColor = c.hex"
+          />
+        </div>
+      </div>
+      <p class="create-modal__hint">
+        {{ form.pinColor ? 'Custom colour' : 'Matching your category' }} · the golden ring
+        stays reserved for Featured events.
+      </p>
 
       <label class="field-label">
         Photos <span class="create-modal__optional">(optional, up to {{ MAX_PHOTOS }} — the first is the cover)</span>
@@ -821,6 +879,89 @@ async function submit() {
   letter-spacing: 0;
   font-weight: 500;
   color: rgba(154, 165, 184, 0.7);
+}
+
+/* Pin colour picker: live preview beside a wrapping swatch grid */
+
+.create-modal__pin-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.create-modal__pin-preview {
+  flex-shrink: 0;
+  width: 54px;
+  height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
+}
+
+.create-modal__swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.create-modal__swatch {
+  aspect-ratio: 1;
+  width: 100%;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.create-modal__swatch:hover {
+  transform: scale(1.12);
+}
+
+.create-modal__swatch--on {
+  border-color: #fff;
+  transform: scale(1.12);
+}
+
+.create-modal__swatch--auto {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    conic-gradient(
+      from 0deg,
+      #f4587a,
+      #fbbf6e,
+      #2dd4a0,
+      #38bdf8,
+      #6366f1,
+      #a78bfa,
+      #f4587a
+    );
+}
+
+.create-modal__swatch-auto {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 62%;
+  height: 62%;
+  border-radius: 50%;
+  background: var(--bg-800);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.create-modal__hint {
+  margin-top: -2px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
 }
 
 .create-modal__cover-row {

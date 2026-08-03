@@ -59,3 +59,37 @@ export const CATEGORY_KEYS = Object.keys(CATEGORIES)
 export function categoryOf(key) {
   return CATEGORIES[key] || CATEGORIES.other
 }
+
+/**
+ * Hosts may pick a custom pin colour. The value is injected into the
+ * pin's SVG markup, so it is validated against this fixed allowlist both
+ * here and by a database check constraint — never rendered as free text.
+ * Every colour is chosen to stay legible on all four basemaps behind a
+ * white glyph.
+ */
+export const PIN_COLORS = [
+  { key: 'coral', label: 'Coral', hex: '#F4587A' },
+  { key: 'amber', label: 'Amber', hex: '#FBBF6E' },
+  { key: 'emerald', label: 'Emerald', hex: '#2DD4A0' },
+  { key: 'teal', label: 'Teal', hex: '#14B8A6' },
+  { key: 'sky', label: 'Sky', hex: '#38BDF8' },
+  { key: 'indigo', label: 'Indigo', hex: '#6366F1' },
+  { key: 'violet', label: 'Violet', hex: '#A78BFA' },
+  { key: 'magenta', label: 'Magenta', hex: '#D946A6' },
+  { key: 'maroon', label: 'Maroon', hex: '#C62D55' },
+  { key: 'slate', label: 'Slate', hex: '#64748B' }
+]
+
+const PIN_COLOR_SET = new Set(PIN_COLORS.map((c) => c.hex))
+
+/** Returns the pin colour to draw: the host's pick, or the category's. */
+export function pinColorOf(event) {
+  const picked = (event?.pinColor || '').toUpperCase()
+  return PIN_COLOR_SET.has(picked) ? picked : categoryOf(event?.category).color
+}
+
+/** Normalises a value for storage — anything unknown becomes null. */
+export function safePinColor(value) {
+  const hex = (value || '').toUpperCase()
+  return PIN_COLOR_SET.has(hex) ? hex : null
+}

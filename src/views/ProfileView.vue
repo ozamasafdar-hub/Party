@@ -9,7 +9,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useEventStore } from '@/stores/eventStore'
 import { useFollowStore } from '@/stores/followStore'
-import { categoryOf } from '@/config/categories'
+import { pinColorOf } from '@/config/categories'
 import { formatWhen } from '@/utils/datetime'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
 import EditProfileModal from '@/components/profile/EditProfileModal.vue'
@@ -195,7 +195,7 @@ function logout() {
             class="profile__event glass-panel"
             @click="openEvent(event.id)"
           >
-            <span class="profile__event-dot" :style="{ background: categoryOf(event.category).color }" />
+            <span class="profile__event-dot" :style="{ background: pinColorOf(event) }" />
             <span class="profile__event-body">
               <span class="profile__event-title">{{ event.title }}</span>
               <span class="profile__event-meta">

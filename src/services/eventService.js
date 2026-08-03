@@ -5,6 +5,7 @@ import {
   SEED_MEMORIES,
   SEED_FOLLOWS
 } from '@/data/seedData'
+import { safePinColor } from '@/config/categories'
 import { supabase, isLive } from './supabaseClient'
 
 /**
@@ -200,6 +201,7 @@ const demo = {
       maxCapacity: data.maxCapacity,
       coverUrl: photos[0] || null,
       photoUrls: photos,
+      pinColor: safePinColor(data.pinColor),
       approvalMode: !!data.approvalMode,
       minReliability: data.minReliability ?? null,
       pricePerSpot: data.pricePerSpot || 0,
@@ -234,7 +236,8 @@ const demo = {
       ladiesOnly: !!data.ladiesOnly,
       proOnly: !!data.proOnly,
       coverUrl: photos[0] || null,
-      photoUrls: photos
+      photoUrls: photos,
+      pinColor: safePinColor(data.pinColor)
     })
     demoPromote(event)
     emit({ type: 'UPDATE', event: clone(event) })
@@ -562,6 +565,7 @@ function toEvent(row) {
       : row.cover_url
         ? [row.cover_url]
         : [],
+    pinColor: row.pin_color || null,
     createdAt: row.created_at || null,
     isProEvent: !!row.is_pro_event,
     featuredPin: !!row.is_featured_pin,
@@ -633,6 +637,23 @@ async function uploadCover(userId, coverDataUrl) {
 const EVENT_SELECT =
   '*, rsvps(user_id, status, created_at), rsvp_payments(user_id, status, amount)'
 
+/**
+ * Columns added by later migrations. A database that hasn't run them yet
+ * rejects the write naming one missing column at a time, so writes drop
+ * the named column and retry rather than failing the host's event.
+ */
+const OPTIONAL_EVENT_COLUMNS = ['photo_urls', 'is_featured_pin', 'pro_only', 'pin_color']
+
+/** Drops the column Postgres complained about. Returns false if it wasn't one of ours. */
+function stripUnknownColumn(payload, error) {
+  const column = OPTIONAL_EVENT_COLUMNS.find(
+    (name) => name in payload && new RegExp(`\\b${name}\\b`).test(error.message || '')
+  )
+  if (!column) return false
+  delete payload[column]
+  return true
+}
+
 const live = {
   async listEvents() {
     const { data, error } = await supabase
@@ -673,6 +694,7 @@ const live = {
       max_capacity: data.maxCapacity,
       cover_url: photo_urls[0] || null,
       photo_urls,
+      pin_color: safePinColor(data.pinColor),
       approval_mode: !!data.approvalMode,
       min_reliability: data.minReliability ?? null,
       price_per_spot: data.pricePerSpot || 0,
@@ -682,20 +704,17 @@ const live = {
       is_featured_pin: !!data.featuredPin,
       pro_only: !!data.proOnly
     }
-    // Databases behind on migrations 004/005 report one unknown column per
+    // Databases behind on migrations 004-008 report one unknown column per
     // attempt — strip and retry so older schemas keep working.
     let row, error
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < OPTIONAL_EVENT_COLUMNS.length + 1; attempt++) {
       ;({ data: row, error } = await supabase
         .from('events')
         .insert(insertPayload)
         .select(EVENT_SELECT)
         .single())
       if (!error) break
-      if (/photo_urls/.test(error.message)) delete insertPayload.photo_urls
-      else if (/is_featured_pin/.test(error.message)) delete insertPayload.is_featured_pin
-      else if (/pro_only/.test(error.message)) delete insertPayload.pro_only
-      else break
+      if (!stripUnknownColumn(insertPayload, error)) break
     }
     if (error) throw friendly(error)
     // Host always attends their own event
@@ -724,7 +743,8 @@ const live = {
       min_reliability: data.minReliability ?? null,
       price_per_spot: data.pricePerSpot || 0,
       is_ladies_only: !!data.ladiesOnly,
-      pro_only: !!data.proOnly
+      pro_only: !!data.proOnly,
+      pin_color: safePinColor(data.pinColor)
     }
     const uploaded = []
     if (data.newPhotoDataUrls?.length) {
@@ -739,21 +759,16 @@ const live = {
     }
     patch.photo_urls = [...(data.keptPhotoUrls || []), ...uploaded]
     patch.cover_url = patch.photo_urls[0] || null
-    let { data: row, error } = await supabase
-      .from('events')
-      .update(patch)
-      .eq('id', eventId)
-      .select(EVENT_SELECT)
-      .single()
-    if (error && /photo_urls/.test(error.message)) {
-      // Database hasn't run migration 004 yet — save with the cover only
-      delete patch.photo_urls
+    let row, error
+    for (let attempt = 0; attempt < OPTIONAL_EVENT_COLUMNS.length + 1; attempt++) {
       ;({ data: row, error } = await supabase
         .from('events')
         .update(patch)
         .eq('id', eventId)
         .select(EVENT_SELECT)
         .single())
+      if (!error) break
+      if (!stripUnknownColumn(patch, error)) break
     }
     if (error) throw friendly(error)
     return toEvent(row)
