@@ -1,4 +1,10 @@
-import { SEED_EVENTS, SEED_MEMBERS, SEED_MESSAGES, SEED_MEMORIES } from '@/data/seedData'
+import {
+  SEED_EVENTS,
+  SEED_MEMBERS,
+  SEED_MESSAGES,
+  SEED_MEMORIES,
+  SEED_FOLLOWS
+} from '@/data/seedData'
 import { supabase, isLive } from './supabaseClient'
 
 /**
@@ -109,6 +115,17 @@ function demoGateReliability(event, userId) {
   }
 }
 
+function demoTierOf(userId) {
+  return db.members.find((m) => m.id === userId)?.subscriptionTier ?? 'free'
+}
+
+/** Pro-only events: only Host Pro members may join or request. */
+function demoGateProOnly(event, userId) {
+  if (event.proOnly && event.hostId !== userId && demoTierOf(userId) !== 'host_pro') {
+    throw friendly(new Error('PRO_ONLY'))
+  }
+}
+
 const listeners = new Set()
 const messageListeners = new Set()
 
@@ -188,6 +205,7 @@ const demo = {
       pricePerSpot: data.pricePerSpot || 0,
       ladiesOnly: !!data.ladiesOnly,
       locationBlurred: !!data.locationBlurred,
+      proOnly: isPro && !!data.proOnly,
       attendanceRecorded: false,
       attendeeIds: [host.id],
       waitlistIds: [],
@@ -214,6 +232,7 @@ const demo = {
       minReliability: data.minReliability ?? null,
       pricePerSpot: data.pricePerSpot || 0,
       ladiesOnly: !!data.ladiesOnly,
+      proOnly: !!data.proOnly,
       coverUrl: photos[0] || null,
       photoUrls: photos
     })
@@ -232,6 +251,7 @@ const demo = {
     const event = demoFind(eventId)
     if (event.attendeeIds.includes(userId)) return clone(event)
     demoGateReliability(event, userId)
+    demoGateProOnly(event, userId)
     if (event.attendeeIds.length >= event.maxCapacity) {
       throw new Error('This event is already full')
     }
@@ -251,6 +271,7 @@ const demo = {
       return clone(event)
     }
     demoGateReliability(event, userId)
+    demoGateProOnly(event, userId)
     event.requestedIds.push(userId)
     emit({ type: 'UPDATE', event: clone(event) })
     return clone(event)
@@ -285,6 +306,7 @@ const demo = {
       return clone(event)
     }
     demoGateReliability(event, userId)
+    demoGateProOnly(event, userId)
     event.waitlistIds.push(userId)
     emit({ type: 'UPDATE', event: clone(event) })
     return clone(event)
@@ -412,10 +434,33 @@ const demo = {
 
   async listFollowing(userId) {
     try {
-      return JSON.parse(localStorage.getItem(`wyn:follows:${userId}`)) || []
+      const stored = JSON.parse(localStorage.getItem(`wyn:follows:${userId}`))
+      if (stored) return stored
     } catch {
-      return []
+      /* fall through to the seeded graph */
     }
+    return [...(SEED_FOLLOWS[userId] || [])]
+  },
+
+  /** Reverse lookup: everyone who follows this member. */
+  async listFollowers(userId) {
+    const followers = new Set()
+    for (const [follower, ids] of Object.entries(SEED_FOLLOWS)) {
+      if (ids.includes(userId)) followers.add(follower)
+    }
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (!key?.startsWith('wyn:follows:')) continue
+        const follower = key.slice('wyn:follows:'.length)
+        const ids = JSON.parse(localStorage.getItem(key)) || []
+        if (ids.includes(userId)) followers.add(follower)
+        else followers.delete(follower) // local list overrides the seed
+      }
+    } catch {
+      /* storage unavailable — seeded graph only */
+    }
+    return [...followers]
   },
 
   async follow(userId, targetId) {
@@ -520,6 +565,7 @@ function toEvent(row) {
     createdAt: row.created_at || null,
     isProEvent: !!row.is_pro_event,
     featuredPin: !!row.is_featured_pin,
+    proOnly: !!row.pro_only,
     approvalMode: !!row.approval_mode,
     minReliability: row.min_reliability ?? null,
     pricePerSpot: Number(row.price_per_spot || 0),
@@ -567,6 +613,9 @@ function friendly(error) {
   }
   if (/FREE_TIER_MONTHLY/.test(error.message)) {
     return new Error('Free hosts can create 2 events per month — upgrade to Host Pro for unlimited hosting')
+  }
+  if (/PRO_ONLY/.test(error.message)) {
+    return new Error('This event is open to Host Pro members only')
   }
   return new Error(error.message)
 }
@@ -630,7 +679,8 @@ const live = {
       is_ladies_only: !!data.ladiesOnly,
       is_location_blurred: !!data.locationBlurred,
       // The enforce_host_tier trigger overrides these for free hosts
-      is_featured_pin: !!data.featuredPin
+      is_featured_pin: !!data.featuredPin,
+      pro_only: !!data.proOnly
     }
     // Databases behind on migrations 004/005 report one unknown column per
     // attempt — strip and retry so older schemas keep working.
@@ -644,6 +694,7 @@ const live = {
       if (!error) break
       if (/photo_urls/.test(error.message)) delete insertPayload.photo_urls
       else if (/is_featured_pin/.test(error.message)) delete insertPayload.is_featured_pin
+      else if (/pro_only/.test(error.message)) delete insertPayload.pro_only
       else break
     }
     if (error) throw friendly(error)
@@ -672,7 +723,8 @@ const live = {
       approval_mode: !!data.approvalMode,
       min_reliability: data.minReliability ?? null,
       price_per_spot: data.pricePerSpot || 0,
-      is_ladies_only: !!data.ladiesOnly
+      is_ladies_only: !!data.ladiesOnly,
+      pro_only: !!data.proOnly
     }
     const uploaded = []
     if (data.newPhotoDataUrls?.length) {
@@ -947,6 +999,15 @@ const live = {
     return data.map((r) => r.followee_id)
   },
 
+  async listFollowers(userId) {
+    const { data, error } = await supabase
+      .from('follows')
+      .select('follower_id')
+      .eq('followee_id', userId)
+    if (error) return [] // policy may hide follows from signed-out visitors
+    return data.map((r) => r.follower_id)
+  },
+
   async follow(userId, targetId) {
     const { error } = await supabase
       .from('follows')
@@ -992,6 +1053,7 @@ export const listMessages = (...a) => backend.listMessages(...a)
 export const sendMessage = (...a) => backend.sendMessage(...a)
 export const subscribeToMessages = (...a) => backend.subscribeToMessages(...a)
 export const listFollowing = (...a) => backend.listFollowing(...a)
+export const listFollowers = (...a) => backend.listFollowers(...a)
 export const follow = (...a) => backend.follow(...a)
 export const unfollow = (...a) => backend.unfollow(...a)
 

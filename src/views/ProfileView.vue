@@ -4,8 +4,8 @@
  * hosted / attending events. Shows your own profile (with Edit + Sign
  * out) or any other member's (with Follow / Unfollow), via /profile/:id.
  */
-import { computed, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useEventStore } from '@/stores/eventStore'
 import { useFollowStore } from '@/stores/followStore'
@@ -40,15 +40,43 @@ const showPro = ref(false)
 const followBusy = ref(false)
 const isProMember = computed(() => member.value?.subscriptionTier === 'host_pro')
 
+/* Social graph — who this member follows, and who follows them */
+const graph = ref({ following: [], followers: [] })
+const graphTab = ref(null) // 'following' | 'followers' | null
+
+async function loadGraph() {
+  graph.value = await followStore.graphFor(viewedId.value)
+}
+
+const graphList = computed(() =>
+  (graphTab.value ? graph.value[graphTab.value] : []).map(
+    (id) =>
+      eventStore.memberById(id) ||
+      (id === me.value?.id ? me.value : null) || {
+        id,
+        name: 'Member',
+        initials: 'M',
+        avatarColor: '#94a3b8'
+      }
+  )
+)
+
 onMounted(async () => {
   if (!eventStore.events.length) eventStore.load()
   if (me.value) await followStore.load(me.value.id)
+  loadGraph()
+})
+
+watch(viewedId, () => {
+  graphTab.value = null
+  loadGraph()
 })
 
 async function toggleFollow() {
   followBusy.value = true
   try {
     await followStore.toggle(me.value.id, viewedId.value)
+    await loadGraph()
   } finally {
     followBusy.value = false
   }
@@ -87,6 +115,20 @@ function logout() {
             <p class="profile__stats">
               <span><strong>{{ hosted.length }}</strong> hosted</span>
               <span><strong>{{ attended.length }}</strong> attending</span>
+              <button
+                class="profile__stat-btn"
+                :class="{ 'profile__stat-btn--on': graphTab === 'followers' }"
+                @click="graphTab = graphTab === 'followers' ? null : 'followers'"
+              >
+                <strong>{{ graph.followers.length }}</strong> followers
+              </button>
+              <button
+                class="profile__stat-btn"
+                :class="{ 'profile__stat-btn--on': graphTab === 'following' }"
+                @click="graphTab = graphTab === 'following' ? null : 'following'"
+              >
+                <strong>{{ graph.following.length }}</strong> following
+              </button>
             </p>
           </div>
           <div class="profile__actions">
@@ -112,6 +154,31 @@ function logout() {
             </button>
           </div>
         </header>
+
+        <Transition name="fade">
+          <section v-if="graphTab" class="profile__graph glass-panel">
+            <h2 class="profile__graph-title">
+              {{ graphTab === 'followers' ? '👥 Followers' : '⭐ Following' }}
+            </h2>
+            <p v-if="!graphList.length" class="profile__graph-empty">
+              {{
+                graphTab === 'followers'
+                  ? 'No followers yet — host a great event and they’ll come.'
+                  : 'Not following anyone yet. Follow hosts to hear about their next event.'
+              }}
+            </p>
+            <RouterLink
+              v-for="person in graphList"
+              :key="person.id"
+              class="profile__graph-row"
+              :to="{ name: 'profile', params: { id: person.id } }"
+            >
+              <MemberAvatar :member="person" :size="34" />
+              <span class="profile__graph-name">{{ person.name }}</span>
+              <span v-if="person.subscriptionTier === 'host_pro'" class="profile__graph-pro">👑</span>
+            </RouterLink>
+          </section>
+        </Transition>
 
         <section v-for="group in [
             { title: '🎉 Hosting', events: hosted, empty: isSelf ? 'You haven\'t hosted anything yet — create an event from the map!' : 'No events hosted yet.' },
@@ -239,6 +306,66 @@ function logout() {
 
 .profile__stats strong {
   color: var(--text-primary);
+}
+
+.profile__stats {
+  flex-wrap: wrap;
+}
+
+.profile__stat-btn {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  padding: 0;
+  transition: color 0.15s ease;
+}
+
+.profile__stat-btn:hover,
+.profile__stat-btn--on {
+  color: var(--gold);
+}
+
+.profile__stat-btn--on strong {
+  color: var(--gold);
+}
+
+.profile__graph {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+}
+
+.profile__graph-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.profile__graph-empty {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.profile__graph-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+}
+
+.profile__graph-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.profile__graph-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.profile__graph-pro {
+  font-size: 12px;
 }
 
 .profile__actions {

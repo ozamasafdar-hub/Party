@@ -49,7 +49,8 @@ const form = reactive({
   pricePerSpot: props.event?.pricePerSpot || '',
   ladiesOnly: props.event?.ladiesOnly ?? false,
   locationBlurred: props.event?.locationBlurred ?? false,
-  featuredPin: props.event?.featuredPin ?? false
+  featuredPin: props.event?.featuredPin ?? false,
+  proOnly: props.event?.proOnly ?? false
 })
 
 const busy = ref(false)
@@ -202,7 +203,8 @@ async function submit() {
     locationBlurred: blur || (isEditing.value && !!props.event?.locationBlurred),
     exactLat: blur ? pin.value.lat : null,
     exactLng: blur ? pin.value.lng : null,
-    featuredPin: form.featuredPin && isPro.value
+    featuredPin: form.featuredPin && isPro.value,
+    proOnly: form.proOnly && isPro.value
   }
 
   busy.value = true
@@ -411,6 +413,18 @@ async function submit() {
           <span>
             <strong>✨ Featured pin <em v-if="!isPro" class="create-modal__pro-tag">👑 PRO</em></strong>
             <em>Your pin glows gold on the map so it stands out to everyone.</em>
+          </span>
+        </label>
+
+        <label class="create-modal__toggle">
+          <input
+            v-model="form.proOnly"
+            type="checkbox"
+            @click="gatePro($event, isPro, 'Restricting an event to Host Pro members is a Pro perk.')"
+          />
+          <span>
+            <strong>👑 Host Pro members only <em v-if="!isPro" class="create-modal__pro-tag">👑 PRO</em></strong>
+            <em>Only Host Pro members can join or request a spot.</em>
           </span>
         </label>
 

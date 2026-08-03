@@ -102,10 +102,22 @@ export const useNotifStore = defineStore('notifications', {
       }
     },
 
+    /**
+     * A host I follow just posted something new — the payoff for the
+     * "Notify me of their next event" promise.
+     */
+    announceNewEvent(event, meId, isFollowed, nameOf) {
+      if (!meId || event.hostId === meId || !isFollowed?.(event.hostId)) return
+      const who = nameOf(event.hostId)
+      this.push(`🔔 ${who} just posted "${event.title}"`, event.id)
+      this.flash(`🔔 ${who} just posted a new event`)
+    },
+
     /** Full-snapshot diff (live mode SYNC): joins on my events + cancellations. */
-    diffSnapshot(prevEvents, nextEvents, meId, nameOf) {
+    diffSnapshot(prevEvents, nextEvents, meId, nameOf, isFollowed) {
       if (!meId) return
       const nextById = new Map(nextEvents.map((e) => [e.id, e]))
+      const prevIds = new Set(prevEvents.map((e) => e.id))
       for (const prev of prevEvents) {
         const next = nextById.get(prev.id)
         if (!next) {
@@ -115,6 +127,12 @@ export const useNotifStore = defineStore('notifications', {
           continue
         }
         this.diffEvent(prev, next, meId, nameOf)
+      }
+      // Events that appeared in this snapshot: announce followed hosts'
+      for (const next of nextEvents) {
+        if (!prevIds.has(next.id)) {
+          this.announceNewEvent(next, meId, isFollowed, nameOf)
+        }
       }
     },
 

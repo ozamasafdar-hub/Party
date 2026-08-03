@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { listFollowing, follow, unfollow } from '@/services/eventService'
+import { listFollowing, listFollowers, follow, unfollow } from '@/services/eventService'
 
 /**
  * Who the signed-in member follows. Friends' events get highlighted on
@@ -37,6 +37,15 @@ export const useFollowStore = defineStore('follows', {
       this.followingIds = this.isFollowing(memberId)
         ? await unfollow(userId, memberId)
         : await follow(userId, memberId)
+    },
+
+    /** Social graph for any member's profile (not just mine). */
+    async graphFor(memberId) {
+      const [following, followers] = await Promise.all([
+        listFollowing(memberId),
+        listFollowers(memberId)
+      ])
+      return { following, followers }
     },
 
     reset() {

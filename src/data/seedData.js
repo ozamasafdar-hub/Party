@@ -15,6 +15,16 @@ export const SEED_MEMBERS = [
   { id: 'u-yousef', name: 'Yousef Mansour', avatarColor: '#fb7185', initials: 'YM', gender: 'male', reliability: 88, attended: 15, flaked: 2 }
 ]
 
+/** Seeded social graph so demo profiles have believable follower counts. */
+export const SEED_FOLLOWS = {
+  'u-hassan': ['u-noora', 'u-mariam', 'u-omar'],
+  'u-mariam': ['u-noora', 'u-layla'],
+  'u-omar': ['u-noora', 'u-hassan'],
+  'u-layla': ['u-noora', 'u-mariam', 'u-yousef'],
+  'u-yousef': ['u-noora', 'u-omar'],
+  'u-noora': ['u-mariam']
+}
+
 function at(hoursFromNow, minutes = 0) {
   const d = new Date(nextHalfHourISO())
   d.setHours(d.getHours() + hoursFromNow, d.getMinutes() + minutes)
@@ -131,6 +141,7 @@ export const SEED_EVENTS = [
     attendeeIds: ['u-noora', 'u-layla', 'u-hassan', 'u-yousef', 'u-mariam'],
     isProEvent: true,
     featuredPin: true,
+    proOnly: true,
     coverUrl: 'https://picsum.photos/seed/wynyacht/800/450',
     photoUrls: [
       'https://picsum.photos/seed/wynyacht/800/450',

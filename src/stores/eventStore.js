@@ -29,6 +29,7 @@ import {
 } from '@/utils/datetime'
 import { useNotifStore } from './notifStore'
 import { useAuthStore } from './authStore'
+import { useFollowStore } from './followStore'
 
 export const useEventStore = defineStore('events', {
   state: () => ({
@@ -169,11 +170,13 @@ export const useEventStore = defineStore('events', {
       const authStore = useAuthStore()
       const meId = () => authStore.currentUser?.id
       const nameOf = (id) => this.memberById(id)?.name || 'Someone'
+      const isFollowed = (id) => useFollowStore().isFollowing(id)
 
       this.unsubscribe = subscribeToEvents((change) => {
         if (change.type === 'INSERT') {
           if (!this.events.some((e) => e.id === change.event.id)) {
             this.events.push(change.event)
+            notifStore.announceNewEvent(change.event, meId(), isFollowed, nameOf)
           }
         } else if (change.type === 'UPDATE') {
           const i = this.events.findIndex((e) => e.id === change.event.id)
@@ -182,7 +185,7 @@ export const useEventStore = defineStore('events', {
             this.events.splice(i, 1, change.event)
           }
         } else if (change.type === 'SYNC') {
-          notifStore.diffSnapshot(this.events, change.events, meId(), nameOf)
+          notifStore.diffSnapshot(this.events, change.events, meId(), nameOf, isFollowed)
           this.events = change.events
         }
       })

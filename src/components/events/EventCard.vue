@@ -39,8 +39,10 @@ const showCalendar = ref(false)
 const chatOpen = ref(false)
 const chatDraft = ref('')
 const chatBody = ref(null)
-const { canBroadcast } = useHostPermissions()
+const { canBroadcast, isPro } = useHostPermissions()
 const showProModal = ref(false)
+const proModalReason = ref('')
+const followBusy = ref(false)
 const showCheckout = ref(false)
 const showRequests = ref(false)
 const showAttendance = ref(false)
@@ -87,6 +89,33 @@ const spotGuaranteed = computed(
 function guestPaid(id) {
   const p = eventStore.paymentFor(props.event, id)
   return !!p && ['held_in_escrow', 'released'].includes(p.status)
+}
+
+/**
+ * Pro-only events: free members can look, but not join. Visitors get the
+ * normal sign-in gate first — they might already be Host Pro.
+ */
+const proBlocked = computed(
+  () =>
+    props.event.proOnly &&
+    !isHost.value &&
+    authStore.isAuthenticated &&
+    !isPro.value
+)
+
+const followingHost = computed(() => followStore.isFollowing(props.event.hostId))
+
+async function toggleFollowHost() {
+  if (!authStore.isAuthenticated) {
+    emit('login-required')
+    return
+  }
+  followBusy.value = true
+  try {
+    await followStore.toggle(meId.value, props.event.hostId)
+  } finally {
+    followBusy.value = false
+  }
 }
 
 const joinLabel = computed(() => {
@@ -376,9 +405,12 @@ onBeforeUnmount(() => chatStore.close())
         }}<template v-if="distanceText"> &nbsp;·&nbsp; 📏 {{ distanceText }}</template>
       </p>
       <div
-        v-if="isPaid || event.ladiesOnly || event.approvalMode || event.minReliability || event.featuredPin || event.isProEvent"
+        v-if="isPaid || event.ladiesOnly || event.approvalMode || event.minReliability || event.featuredPin || event.isProEvent || event.proOnly"
         class="event-card__chips"
       >
+        <span v-if="event.proOnly" class="event-card__chip event-card__chip--gold">
+          👑 Host Pro only
+        </span>
         <span v-if="event.featuredPin" class="event-card__chip event-card__chip--gold">
           ✨ Featured
         </span>
@@ -437,17 +469,29 @@ onBeforeUnmount(() => chatStore.close())
       </a>
     </div>
 
-    <RouterLink
-      class="event-card__host"
-      :to="{ name: 'profile', params: { id: event.hostId } }"
-      title="View host profile"
-    >
-      <MemberAvatar :member="host" :size="34" />
-      <div>
-        <div class="event-card__host-name">{{ host.name }}</div>
-        <div class="event-card__host-role">Host · view profile →</div>
-      </div>
-    </RouterLink>
+    <div class="event-card__host-row">
+      <RouterLink
+        class="event-card__host"
+        :to="{ name: 'profile', params: { id: event.hostId } }"
+        title="View host profile"
+      >
+        <MemberAvatar :member="host" :size="34" />
+        <div>
+          <div class="event-card__host-name">{{ host.name }}</div>
+          <div class="event-card__host-role">Host · view profile →</div>
+        </div>
+      </RouterLink>
+      <button
+        v-if="!isHost"
+        class="event-card__follow"
+        :class="{ 'event-card__follow--on': followingHost }"
+        :disabled="followBusy"
+        :title="followingHost ? 'Unfollow' : 'Get notified when they post a new event'"
+        @click="toggleFollowHost"
+      >
+        {{ followingHost ? '✓ Following' : '⭐ Follow' }}
+      </button>
+    </div>
 
     <p v-if="friendsGoing.length" class="event-card__friends">
       ⭐ {{ friendsGoing.length }} friend{{ friendsGoing.length === 1 ? '' : 's' }} going —
@@ -558,6 +602,13 @@ onBeforeUnmount(() => chatStore.close())
           ⏳ On waitlist · #{{ waitlistPos }} — tap to leave
         </button>
         <button
+          v-else-if="proBlocked"
+          class="btn-primary event-card__join"
+          @click="proModalReason = 'This host opened the event to Host Pro members only.'; showProModal = true"
+        >
+          👑 Host Pro members only — upgrade to join
+        </button>
+        <button
           v-else-if="isPaid && full && !event.approvalMode"
           class="btn-ghost event-card__join"
           disabled
@@ -594,7 +645,7 @@ onBeforeUnmount(() => chatStore.close())
         <button
           v-else-if="!ended"
           class="btn-ghost event-card__broadcast"
-          @click="showProModal = true"
+          @click="proModalReason = 'WhatsApp blasts to your guests are a Host Pro perk.'; showProModal = true"
         >
           📣 WhatsApp blast 🔒
         </button>
@@ -655,7 +706,7 @@ onBeforeUnmount(() => chatStore.close())
   <HostRequestsPanel v-if="showRequests" :event="event" @close="showRequests = false" />
   <HostProModal
     v-if="showProModal"
-    reason="WhatsApp blasts to your guests are a Host Pro perk."
+    :reason="proModalReason"
     @close="showProModal = false"
   />
 </template>
@@ -900,24 +951,64 @@ onBeforeUnmount(() => chatStore.close())
   background: rgba(255, 255, 255, 0.07);
 }
 
+.event-card__host-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
 .event-card__host {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 14px;
   padding: 10px 12px;
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.045);
   transition: background 0.15s ease;
 }
 
+.event-card__follow {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  padding: 9px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--gold);
+  background: rgba(212, 175, 106, 0.12);
+  border: 1px solid rgba(212, 175, 106, 0.4);
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.event-card__follow:hover {
+  background: rgba(212, 175, 106, 0.2);
+}
+
+.event-card__follow--on {
+  color: var(--success);
+  background: rgba(45, 212, 160, 0.12);
+  border-color: rgba(45, 212, 160, 0.4);
+}
+
 .event-card__host:hover {
   background: rgba(255, 255, 255, 0.09);
+}
+
+.event-card__host > div {
+  min-width: 0;
 }
 
 .event-card__host-name {
   font-size: 14px;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .event-card__host-role {
