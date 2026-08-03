@@ -3,7 +3,7 @@
  *
  * Every basemap below is free with no API key. CARTO styles use the {r}
  * retina modifier, so high-DPI screens automatically receive @2x UHD
- * tiles. The "chart" style is the bundled offline vector basemap — it is
+ * tiles. The "soft" style is the bundled offline vector basemap — it is
  * also the automatic fallback whenever raster tiles can't load.
  */
 export const QATAR_CENTER = [25.3, 51.48]
@@ -70,7 +70,9 @@ export const BASEMAPS = {
     label: 'Streets',
     emoji: '🗺️',
     description: 'Colourful streets and places',
-    filter: 'saturate(1.28) contrast(1.05) brightness(1.02)',
+    // Warms the land toward cream and pushes the water toward the
+    // turquoise of the Soft style, so the two don't clash
+    filter: 'saturate(1.35) hue-rotate(-6deg) contrast(1.04) brightness(1.03)',
     sources: [[carto('rastertiles/voyager')], [osm]]
   },
   minimal: {
@@ -90,10 +92,10 @@ export const BASEMAPS = {
     filter: 'saturate(1.2) contrast(1.06)',
     sources: [[esri('World_Imagery'), esri('Reference/World_Boundaries_and_Places')]]
   },
-  chart: {
-    label: 'Chart',
-    emoji: '🧭',
-    description: 'Offline vector map of Qatar',
+  soft: {
+    label: 'Soft',
+    emoji: '🩵',
+    description: 'Cream land, turquoise sea — works offline',
     vector: true,
     sources: []
   }

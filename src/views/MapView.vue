@@ -95,7 +95,7 @@ const isEmbeddedPreview = (() => {
 
 function onTileFallback() {
   // Raster tiles unreachable — the map switched itself to the chart
-  mapStyle.value = 'chart'
+  mapStyle.value = 'soft'
   fallbackNotice.value = true
   clearTimeout(noticeTimer)
   noticeTimer = setTimeout(() => (fallbackNotice.value = false), isEmbeddedPreview ? 12000 : 5000)

@@ -390,7 +390,7 @@ defineExpose({ locateMe, resetView, clearDraftPin, setDraftPin, fitToEvents })
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: #dfe7ee; /* sea tone behind the tiles while they load */
+  background: #74CEEA; /* sea — matches the vector chart's water */
 }
 
 /* Tiles only — markers, circles and labels keep their own colors */
@@ -425,14 +425,16 @@ defineExpose({ locateMe, resetView, clearDraftPin, setDraftPin, fitToEvents })
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(70, 84, 105, 0.85);
-  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.85);
+  color: rgba(60, 64, 67, 0.9);
+  text-shadow:
+    0 1px 3px rgba(255, 255, 255, 0.95),
+    0 0 6px rgba(255, 255, 255, 0.85);
   white-space: nowrap;
 }
 
 .live-map :deep(.place-label__text--major) {
   font-size: 13px;
-  color: rgba(32, 44, 62, 0.92);
+  color: #202124;
   letter-spacing: 0.18em;
 }
 
@@ -440,7 +442,7 @@ defineExpose({ locateMe, resetView, clearDraftPin, setDraftPin, fitToEvents })
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.1em;
-  color: rgba(90, 105, 130, 0.75);
+  color: rgba(60, 64, 67, 0.72);
 }
 
 .live-map :deep(.place-label__text--hood) {
@@ -448,7 +450,7 @@ defineExpose({ locateMe, resetView, clearDraftPin, setDraftPin, fitToEvents })
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: none;
-  color: rgba(80, 95, 118, 0.8);
+  color: rgba(60, 64, 67, 0.75);
 }
 
 .live-map :deep(.event-cluster__badge) {
