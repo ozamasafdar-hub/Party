@@ -50,6 +50,17 @@ const esri = (service, maxNativeZoom = 19) => ({
  * bundled vector chart. A chain is an array of stacked tile layers
  * (base first, optional label overlays after).
  */
+/**
+ * CARTO and OSM render OpenStreetMap's local `name` tag, which in Qatar
+ * is Arabic. Esri's reference layers romanise (their imagery labels read
+ * "Jabal Thuaileb", "Al Egla"), so we stack them over a label-free base
+ * to keep our colours *and* get Latin place and street names.
+ */
+const ENGLISH_LABELS = [
+  esri('Reference/World_Transportation', 19),
+  esri('Reference/World_Boundaries_and_Places', 16)
+]
+
 const osm = {
   url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
   options: {
@@ -73,7 +84,11 @@ export const BASEMAPS = {
     // Warms the land toward cream and pushes the water toward the
     // turquoise of the Soft style, so the two don't clash
     filter: 'saturate(1.35) hue-rotate(-6deg) contrast(1.04) brightness(1.03)',
-    sources: [[carto('rastertiles/voyager')], [osm]]
+    sources: [
+      [carto('rastertiles/voyager_nolabels'), ...ENGLISH_LABELS],
+      [carto('rastertiles/voyager')], // local-language labels, but always works
+      [osm]
+    ]
   },
   minimal: {
     label: 'Minimal',
@@ -85,6 +100,7 @@ export const BASEMAPS = {
     // to cream and the roads stay pure white.
     filter: 'saturate(5) hue-rotate(-9deg)',
     sources: [
+      [carto('light_nolabels'), ...ENGLISH_LABELS],
       [carto('light_all')],
       [esri('Canvas/World_Light_Gray_Base', 16), esri('Canvas/World_Light_Gray_Reference', 16)]
     ]
