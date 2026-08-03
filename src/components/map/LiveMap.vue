@@ -300,6 +300,11 @@ function flyToEvent(event) {
   map.flyTo([event.lat, event.lng], Math.max(map.getZoom(), 14), { duration: 0.8 })
 }
 
+/** Camera-only move — used by search results that aren't event pins. */
+function flyTo(lat, lng, zoom = 15) {
+  map.flyTo([lat, lng], Math.max(map.getZoom(), zoom), { duration: 0.8 })
+}
+
 function locateMe() {
   map.locate({ setView: true, maxZoom: 15 })
 }
@@ -378,7 +383,7 @@ function fitToEvents(events) {
   map.flyToBounds(bounds, { padding: [70, 70], maxZoom: 13, duration: 0.8 })
 }
 
-defineExpose({ locateMe, resetView, clearDraftPin, setDraftPin, fitToEvents })
+defineExpose({ locateMe, resetView, clearDraftPin, setDraftPin, fitToEvents, flyTo })
 </script>
 
 <template>

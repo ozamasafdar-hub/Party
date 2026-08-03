@@ -1,11 +1,11 @@
 <script setup>
 /**
  * MapSearchBar — place search shown while picking an event location.
- * Free OSM geocoding, biased to Qatar: Photon (autocomplete-friendly)
- * with Nominatim as fallback. Selecting a result emits
- * { lat, lng, name } so the parent can fly there and set the pin.
+ * Selecting a result emits { lat, lng, name } so the parent can fly
+ * there and set the pin. The lookup itself lives in utils/geocode.
  */
 import { ref, onMounted } from 'vue'
+import { searchPlaces } from '@/utils/geocode'
 
 const emit = defineEmits(['select'])
 
@@ -33,56 +33,13 @@ async function search(q) {
   searching.value = true
   failed.value = false
   try {
-    let found = await photon(q)
-    if (!found.length) found = await nominatim(q)
-    results.value = found
+    results.value = await searchPlaces(q)
   } catch {
-    try {
-      results.value = await nominatim(q)
-    } catch {
-      results.value = []
-      failed.value = true
-    }
+    results.value = []
+    failed.value = true
   } finally {
     searching.value = false
   }
-}
-
-async function photon(q) {
-  const url =
-    `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}` +
-    '&limit=6&lang=en&bbox=50.5,24.4,51.9,26.3'
-  const res = await fetch(url)
-  if (!res.ok) throw new Error('photon failed')
-  const json = await res.json()
-  return (json.features || [])
-    .filter((f) => f.properties?.name && f.geometry?.coordinates)
-    .map((f) => ({
-      name: f.properties.name,
-      detail: [f.properties.street, f.properties.district, f.properties.city]
-        .filter(Boolean)
-        .join(', '),
-      lat: f.geometry.coordinates[1],
-      lng: f.geometry.coordinates[0]
-    }))
-}
-
-async function nominatim(q) {
-  const url =
-    `https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=qa&limit=6` +
-    `&q=${encodeURIComponent(q)}`
-  const res = await fetch(url)
-  if (!res.ok) throw new Error('nominatim failed')
-  const json = await res.json()
-  return json.map((r) => {
-    const parts = r.display_name.split(',')
-    return {
-      name: parts[0].trim(),
-      detail: parts.slice(1, 3).join(',').trim(),
-      lat: Number(r.lat),
-      lng: Number(r.lon)
-    }
-  })
 }
 
 function pick(result) {

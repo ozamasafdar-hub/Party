@@ -8,7 +8,7 @@
  *   - Edit mode reusing the same modal for hosts
  */
 import { computed, nextTick, onMounted, onBeforeUnmount, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import LiveMap from '@/components/map/LiveMap.vue'
 import TopBar from '@/components/layout/TopBar.vue'
 import EventCard from '@/components/events/EventCard.vue'
@@ -17,6 +17,7 @@ import EventListPanel from '@/components/events/EventListPanel.vue'
 import LoginPanel from '@/components/auth/LoginPanel.vue'
 import MapStyleControl from '@/components/map/MapStyleControl.vue'
 import MapSearchBar from '@/components/map/MapSearchBar.vue'
+import MapSearchPanel from '@/components/map/MapSearchPanel.vue'
 import TimePills from '@/components/map/TimePills.vue'
 import HostProModal from '@/components/pro/HostProModal.vue'
 import StoryViewer from '@/components/memories/StoryViewer.vue'
@@ -30,6 +31,7 @@ import { useFollowStore } from '@/stores/followStore'
 import { BASEMAPS, DEFAULT_BASEMAP } from '@/config/map'
 
 const route = useRoute()
+const router = useRouter()
 const eventStore = useEventStore()
 const authStore = useAuthStore()
 const notifStore = useNotifStore()
@@ -61,6 +63,7 @@ const pickedPlaceName = ref('') // from search — suggested into the form
 const showCreateModal = ref(false)
 const editingEvent = ref(null)
 const showList = ref(false)
+const showSearch = ref(false)
 
 // Map style + heatmap, remembered between visits
 const storedStyle = readPref(STYLE_KEY)
@@ -135,6 +138,7 @@ onBeforeUnmount(() => {
 function onSelect(eventId) {
   if (pickMode.value) return
   showList.value = false
+  showSearch.value = false
   // In recap mode a pin opens the story viewer, not the event card
   if (eventStore.mapMode === 'memories') {
     storyEvent.value = eventStore.events.find((e) => e.id === eventId) || null
@@ -317,7 +321,45 @@ function onEdit(event) {
 
 function toggleList() {
   showList.value = !showList.value
-  if (showList.value) eventStore.clearSelection()
+  if (showList.value) {
+    showSearch.value = false
+    eventStore.clearSelection()
+  }
+}
+
+/* --- search ---------------------------------------------------------------
+ * One box over the whole map: events and people come from the store,
+ * places from the geocoder. Each result type has its own landing spot.
+ */
+
+function toggleSearch() {
+  showSearch.value = !showSearch.value
+  if (showSearch.value) showList.value = false
+}
+
+function onSearchEvent(eventId) {
+  showSearch.value = false
+  // Recap pins keep their own viewer, so reuse the normal pin behaviour
+  onSelect(eventId)
+}
+
+function onSearchPerson(memberId) {
+  showSearch.value = false
+  // Profiles are members-only. Prompt in place rather than letting the
+  // route guard bounce a visitor to a full-page login.
+  if (!authStore.isAuthenticated) {
+    openLogin('Sign in to see member profiles.')
+    return
+  }
+  router.push(`/profile/${memberId}`)
+}
+
+/** A place isn't a pin — just fly the camera there. */
+function onSearchPlace(place) {
+  showSearch.value = false
+  eventStore.clearSelection()
+  liveMap.value?.flyTo(place.lat, place.lng)
+  notifStore.flash(`📍 ${place.name}`)
 }
 </script>
 
@@ -340,7 +382,14 @@ function toggleList() {
 
     <!-- Floating map controls -->
     <div class="map-view__controls">
-      <button class="map-view__ctrl glass-panel" title="Reset view" @click="liveMap?.resetView()">🇶🇦</button>
+      <button
+        class="map-view__ctrl glass-panel"
+        :class="{ 'map-view__ctrl--active': showSearch }"
+        title="Search"
+        @click="toggleSearch"
+      >
+        🔍
+      </button>
       <button class="map-view__ctrl glass-panel" title="My location" @click="liveMap?.locateMe()">📍</button>
       <button
         class="map-view__ctrl glass-panel"
@@ -398,6 +447,18 @@ function toggleList() {
     <Transition name="fade">
       <div v-if="pickingLocation" class="map-view__search">
         <MapSearchBar @select="onSearchSelect" />
+      </div>
+    </Transition>
+
+    <!-- Global search: events, organizers, places -->
+    <Transition name="fade">
+      <div v-if="showSearch && !pickingLocation" class="map-view__search">
+        <MapSearchPanel
+          @close="showSearch = false"
+          @select-event="onSearchEvent"
+          @select-person="onSearchPerson"
+          @select-place="onSearchPlace"
+        />
       </div>
     </Transition>
 
