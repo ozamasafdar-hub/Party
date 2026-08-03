@@ -645,7 +645,9 @@ function toggleList() {
 .map-view__notice {
   position: absolute;
   z-index: 46;
-  top: max(84px, calc(env(safe-area-inset-top) + 70px));
+  /* Below the whole top bar (brand + chips, even when wrapped on mobile),
+     and click-through — a toast must never block the next tap */
+  top: max(132px, calc(env(safe-area-inset-top) + 118px));
   left: 50%;
   transform: translateX(-50%);
   padding: 11px 18px;
@@ -683,6 +685,8 @@ function toggleList() {
   font-weight: 600;
   border-color: rgba(45, 212, 160, 0.4);
   box-shadow: 0 12px 36px rgba(45, 212, 160, 0.15), var(--shadow-card);
+  /* pure feedback — taps go straight through to whatever is beneath */
+  pointer-events: none;
 }
 
 @media (max-width: 520px) {
