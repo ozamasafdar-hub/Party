@@ -11,7 +11,16 @@ import { useAuthStore } from '@/stores/authStore'
 import { useChatStore } from '@/stores/chatStore'
 import { useFollowStore } from '@/stores/followStore'
 import { categoryOf } from '@/config/categories'
-import { formatWhen, formatDuration, formatCountdown, formatTime, isLive, hasEnded } from '@/utils/datetime'
+import {
+  formatWhen,
+  formatDuration,
+  formatCountdown,
+  formatTime,
+  isLive,
+  hasEnded,
+  inMemoryWindow,
+  memoryHoursLeft
+} from '@/utils/datetime'
 import { googleCalendarUrl, icsDataUrl } from '@/utils/calendar'
 import { distanceKm, formatDistance } from '@/utils/geo'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
@@ -24,7 +33,7 @@ const props = defineProps({
   event: { type: Object, required: true }
 })
 
-const emit = defineEmits(['close', 'edit', 'login-required'])
+const emit = defineEmits(['close', 'edit', 'login-required', 'recap'])
 
 const router = useRouter()
 const eventStore = useEventStore()
@@ -74,6 +83,17 @@ const isRequested = computed(() => eventStore.isRequested(props.event, meId.valu
 const canChat = computed(() => isHost.value || isAttending.value || isWaitlisted.value)
 
 const ended = computed(() => hasEnded(props.event))
+
+/**
+ * A recap only exists if someone actually posted to it, and only for the
+ * 24h after the event ends. No photos or clips, no recap — the card says
+ * nothing rather than advertising an empty one.
+ */
+const recap = computed(() => {
+  if (!inMemoryWindow(props.event)) return null
+  const count = eventStore.memoriesFor(props.event.id).length
+  return count ? { count, hoursLeft: memoryHoursLeft(props.event) } : null
+})
 const isPaid = computed(() => Number(props.event.pricePerSpot) > 0)
 const priceAmount = computed(() => Number(props.event.pricePerSpot).toFixed(0))
 const requestCount = computed(() => (props.event.requestedIds || []).length)
@@ -593,7 +613,18 @@ onBeforeUnmount(() => chatStore.close())
     <p v-if="error" class="event-card__error">{{ error }}</p>
 
     <footer class="event-card__actions">
-      <template v-if="!isHost">
+      <!-- Only shown when photos or clips were actually posted -->
+      <button v-if="recap" class="event-card__recap" @click="emit('recap', event)">
+        📸 See the recap · {{ recap.count }} post{{ recap.count === 1 ? '' : 's' }}
+        <span class="event-card__recap-left">{{ recap.hoursLeft }}h left</span>
+      </button>
+
+      <template v-if="!isHost && ended">
+        <p class="event-card__ended-note">
+          {{ isAttending ? '🏁 You went to this event' : '🏁 This event has ended' }}
+        </p>
+      </template>
+      <template v-else-if="!isHost">
         <p v-if="isAttending && spotGuaranteed" class="event-card__guaranteed">
           💳 Spot guaranteed — payment held in escrow
         </p>
@@ -645,7 +676,9 @@ onBeforeUnmount(() => chatStore.close())
         </button>
       </template>
       <template v-else>
-        <div class="event-card__hosting">You're hosting this event 🎉</div>
+        <div class="event-card__hosting">
+          {{ ended ? 'You hosted this event 🏁' : "You're hosting this event 🎉" }}
+        </div>
         <button
           v-if="event.approvalMode && !ended"
           class="btn-primary event-card__requests-btn"
@@ -700,7 +733,8 @@ onBeforeUnmount(() => chatStore.close())
             </div>
           </template>
         </div>
-        <div class="event-card__host-actions">
+        <!-- Nothing left to edit or call off once it has happened -->
+        <div v-if="!ended" class="event-card__host-actions">
           <button class="btn-ghost" :disabled="busy" @click="emit('edit', event)">
             ✏️ Edit details
           </button>
@@ -1325,6 +1359,40 @@ onBeforeUnmount(() => chatStore.close())
   color: var(--gold);
   font-size: 14px;
   font-weight: 600;
+}
+
+.event-card__recap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0b0f19;
+  background: linear-gradient(120deg, #a78bfa, #d4af6a);
+  box-shadow: 0 8px 22px rgba(167, 139, 250, 0.28);
+}
+
+.event-card__recap-left {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(11, 15, 25, 0.22);
+}
+
+.event-card__ended-note {
+  padding: 12px;
+  border-radius: var(--radius-md);
+  text-align: center;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
 }
 
 .event-card__host-actions {

@@ -167,6 +167,7 @@ function openRecap(eventId) {
   const event = eventStore.events.find((e) => e.id === eventId)
   if (!event) return
   eventStore.setMapMode('memories')
+  eventStore.clearSelection() // the story takes over from the card
   storyEvent.value = event
   if (route.query.recap) router.replace({ name: 'map' })
 }
@@ -628,6 +629,7 @@ function onSearchPlace(place) {
           @close="eventStore.clearSelection()"
           @edit="onEdit"
           @login-required="onJoinLoginRequired"
+          @recap="openRecap($event.id)"
         />
       </div>
     </Transition>
