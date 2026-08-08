@@ -35,7 +35,15 @@ const db = {
   })),
   members: SEED_MEMBERS.map((m) => ({ ...m })),
   messages: SEED_MESSAGES.map((m) => ({ ...m })),
-  memories: SEED_MEMORIES.map((m) => ({ ...m, reactions: { ...m.reactions } }))
+  memories: SEED_MEMORIES.map((m) => ({ ...m, reactions: { ...m.reactions } })),
+  // Direct messages: threads keyed by their ordered pair, same shape the
+  // live tables use. `dmSeeded` tracks who has had their demo inbox filled.
+  dmThreads: [],
+  dmMessages: [],
+  dmReads: {},
+  dmBlocks: new Set(),
+  dmSeeded: new Set(),
+  dmSeq: 1
 }
 
 function demoReliabilityOf(userId) {
@@ -129,6 +137,7 @@ function demoGateProOnly(event, userId) {
 
 const listeners = new Set()
 const messageListeners = new Set()
+const dmListeners = new Set()
 
 function emit(change) {
   listeners.forEach((cb) => cb(change))
@@ -136,6 +145,65 @@ function emit(change) {
 
 function emitMessage(message) {
   messageListeners.forEach((cb) => cb({ ...message }))
+}
+
+function emitDm(message) {
+  dmListeners.forEach((cb) => cb({ ...message }))
+}
+
+/* --- demo direct messages ------------------------------------------------- */
+
+const DM_BLOCKED_MESSAGE = "You can't message this member."
+
+/** Threads are stored under the ordered pair, so a pair has exactly one. */
+function demoPairKey(a, b) {
+  return [a, b].sort().join('|')
+}
+
+function demoFindThread(meId, peerId, create = false) {
+  const key = demoPairKey(meId, peerId)
+  let thread = db.dmThreads.find((t) => t.key === key)
+  if (!thread && create) {
+    thread = {
+      id: `dt-${db.dmSeq++}`,
+      key,
+      members: [meId, peerId],
+      lastAt: null,
+      lastBody: ''
+    }
+    db.dmThreads.push(thread)
+  }
+  return thread
+}
+
+function demoBlockedEitherWay(a, b) {
+  return db.dmBlocks.has(`${a}|${b}`) || db.dmBlocks.has(`${b}|${a}`)
+}
+
+function demoUnread(thread, meId) {
+  const readAt = new Date(db.dmReads[`${thread.id}|${meId}`] || 0)
+  return db.dmMessages.filter(
+    (m) => m.threadId === thread.id && m.senderId !== meId && new Date(m.at) > readAt
+  ).length
+}
+
+/**
+ * Demo mode has one browser and one real person, so a fresh account would
+ * always open an empty inbox. Seed a single greeting the first time
+ * someone looks — enough to show the feature working without pretending
+ * there is a crowd.
+ */
+function demoSeedInbox(meId) {
+  if (!meId || db.dmSeeded.has(meId)) return
+  db.dmSeeded.add(meId)
+  const greeter = db.members.find((m) => m.id === 'u-noora')
+  if (!greeter || greeter.id === meId) return
+  const thread = demoFindThread(meId, greeter.id, true)
+  const at = new Date(Date.now() - 45 * 60 * 1000).toISOString()
+  const text = 'Salam! Saw you on the map — the Katara concert has spots if you fancy it 🎶'
+  db.dmMessages.push({ id: `dm-${db.dmSeq++}`, threadId: thread.id, senderId: greeter.id, text, at })
+  thread.lastAt = at
+  thread.lastBody = text.slice(0, 140)
 }
 
 function clone(event) {
@@ -486,6 +554,90 @@ const demo = {
       /* sandboxed iframe — follow just won't persist */
     }
     return [...ids]
+  },
+
+  /* direct messages -------------------------------------------------------- */
+
+  async openDmThread(meId, peerId) {
+    if (demoBlockedEitherWay(meId, peerId)) throw new Error(DM_BLOCKED_MESSAGE)
+    return demoFindThread(meId, peerId, true).id
+  },
+
+  async listDmThreads(meId) {
+    demoSeedInbox(meId)
+    return db.dmThreads
+      .filter((t) => t.members.includes(meId))
+      .map((t) => ({
+        id: t.id,
+        peerId: t.members.find((id) => id !== meId),
+        lastBody: t.lastBody,
+        lastAt: t.lastAt,
+        unread: demoUnread(t, meId)
+      }))
+      .sort((a, b) => new Date(b.lastAt || 0) - new Date(a.lastAt || 0))
+  },
+
+  async listDmMessages(threadId) {
+    return db.dmMessages
+      .filter((m) => m.threadId === threadId)
+      .sort((a, b) => new Date(a.at) - new Date(b.at))
+      .map((m) => ({ ...m }))
+  },
+
+  async sendDm(threadId, user, text) {
+    const thread = db.dmThreads.find((t) => t.id === threadId)
+    if (!thread) throw new Error('Conversation not found')
+    const peerId = thread.members.find((id) => id !== user.id)
+    if (demoBlockedEitherWay(user.id, peerId)) throw new Error(DM_BLOCKED_MESSAGE)
+    const message = {
+      id: `dm-${db.dmSeq++}`,
+      threadId,
+      senderId: user.id,
+      text: text.trim().slice(0, 2000),
+      at: new Date().toISOString()
+    }
+    db.dmMessages.push(message)
+    thread.lastAt = message.at
+    thread.lastBody = message.text.slice(0, 140)
+    emitDm(message)
+    return { ...message }
+  },
+
+  subscribeToDmThread(threadId, callback) {
+    const filtered = (message) => {
+      if (message.threadId === threadId) callback(message)
+    }
+    dmListeners.add(filtered)
+    return () => dmListeners.delete(filtered)
+  },
+
+  subscribeToDmInbox(meId, callback) {
+    const filtered = (message) => {
+      const thread = db.dmThreads.find((t) => t.id === message.threadId)
+      if (thread?.members.includes(meId)) callback(message)
+    }
+    dmListeners.add(filtered)
+    return () => dmListeners.delete(filtered)
+  },
+
+  async markDmRead(threadId, meId) {
+    db.dmReads[`${threadId}|${meId}`] = new Date().toISOString()
+  },
+
+  async listBlocked(meId) {
+    return [...db.dmBlocks]
+      .filter((key) => key.startsWith(`${meId}|`))
+      .map((key) => key.slice(meId.length + 1))
+  },
+
+  async blockMember(meId, peerId) {
+    db.dmBlocks.add(`${meId}|${peerId}`)
+    return demo.listBlocked(meId)
+  },
+
+  async unblockMember(meId, peerId) {
+    db.dmBlocks.delete(`${meId}|${peerId}`)
+    return demo.listBlocked(meId)
   }
 }
 
@@ -598,6 +750,19 @@ function toMessage(row) {
   }
 }
 
+function toDm(row) {
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    senderId: row.sender_id,
+    text: row.body,
+    at: row.created_at
+  }
+}
+
+/** Databases that haven't run migration 009 yet name one of these. */
+const DM_TABLES = /dm_threads|dm_messages|dm_reads|dm_blocks|dm_inbox|open_dm_thread/
+
 function friendly(error) {
   if (/EVENT_FULL/.test(error.message)) return new Error('This event is already full')
   if (/RELIABILITY_TOO_LOW/.test(error.message)) {
@@ -620,6 +785,17 @@ function friendly(error) {
   }
   if (/PRO_ONLY/.test(error.message)) {
     return new Error('This event is open to Host Pro members only')
+  }
+  if (/DM_BLOCKED/.test(error.message)) {
+    return new Error(DM_BLOCKED_MESSAGE)
+  }
+  // An insert refused by the DM policy means the other side blocked you —
+  // which they are not told, and neither are you, beyond this.
+  if (/row-level security/i.test(error.message) && /dm_messages/.test(error.message)) {
+    return new Error("This member isn't accepting messages.")
+  }
+  if (DM_TABLES.test(error.message)) {
+    return new Error("Direct messages aren't switched on yet.")
   }
   return new Error(error.message)
 }
@@ -1031,6 +1207,110 @@ const live = {
     return live.listFollowing(userId)
   },
 
+  /* direct messages -------------------------------------------------------- */
+
+  async openDmThread(meId, peerId) {
+    const { data, error } = await supabase.rpc('open_dm_thread', { peer: peerId })
+    if (error) throw friendly(error)
+    return data
+  },
+
+  async listDmThreads() {
+    // One round trip: the RPC returns each thread with its unread count.
+    const { data, error } = await supabase.rpc('dm_inbox')
+    if (error) {
+      if (DM_TABLES.test(error.message)) return [] // migration 009 not run yet
+      throw friendly(error)
+    }
+    return data.map((row) => ({
+      id: row.id,
+      peerId: row.peer_id,
+      lastBody: row.last_body || '',
+      lastAt: row.last_message_at,
+      unread: row.unread || 0
+    }))
+  },
+
+  async listDmMessages(threadId) {
+    const { data, error } = await supabase
+      .from('dm_messages')
+      .select('*')
+      .eq('thread_id', threadId)
+      .order('created_at')
+    if (error) throw friendly(error)
+    return data.map(toDm)
+  },
+
+  async sendDm(threadId, user, text) {
+    const { data, error } = await supabase
+      .from('dm_messages')
+      .insert({ thread_id: threadId, sender_id: user.id, body: text.trim().slice(0, 2000) })
+      .select()
+      .single()
+    if (error) throw friendly(error)
+    return toDm(data)
+  },
+
+  subscribeToDmThread(threadId, callback) {
+    const channel = supabase
+      .channel(`dm-${threadId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'dm_messages', filter: `thread_id=eq.${threadId}` },
+        (payload) => callback(toDm(payload.new))
+      )
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  },
+
+  subscribeToDmInbox(meId, callback) {
+    // No filter: row level security already limits delivery to threads
+    // this member is in, so an unfiltered subscription leaks nothing.
+    const channel = supabase
+      .channel(`dm-inbox-${meId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'dm_messages' },
+        (payload) => callback(toDm(payload.new))
+      )
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  },
+
+  async markDmRead(threadId, meId) {
+    await supabase
+      .from('dm_reads')
+      .upsert({ thread_id: threadId, user_id: meId, read_at: new Date().toISOString() })
+  },
+
+  /** Only my own blocks — being blocked is deliberately not visible. */
+  async listBlocked(meId) {
+    const { data, error } = await supabase
+      .from('dm_blocks')
+      .select('blocked_id')
+      .eq('blocker_id', meId)
+    if (error) return []
+    return data.map((r) => r.blocked_id)
+  },
+
+  async blockMember(meId, peerId) {
+    const { error } = await supabase
+      .from('dm_blocks')
+      .upsert({ blocker_id: meId, blocked_id: peerId })
+    if (error) throw friendly(error)
+    return live.listBlocked(meId)
+  },
+
+  async unblockMember(meId, peerId) {
+    const { error } = await supabase
+      .from('dm_blocks')
+      .delete()
+      .eq('blocker_id', meId)
+      .eq('blocked_id', peerId)
+    if (error) throw friendly(error)
+    return live.listBlocked(meId)
+  },
+
   async unfollow(userId, targetId) {
     const { error } = await supabase
       .from('follows')
@@ -1071,6 +1351,16 @@ export const listFollowing = (...a) => backend.listFollowing(...a)
 export const listFollowers = (...a) => backend.listFollowers(...a)
 export const follow = (...a) => backend.follow(...a)
 export const unfollow = (...a) => backend.unfollow(...a)
+export const openDmThread = (...a) => backend.openDmThread(...a)
+export const listDmThreads = (...a) => backend.listDmThreads(...a)
+export const listDmMessages = (...a) => backend.listDmMessages(...a)
+export const sendDm = (...a) => backend.sendDm(...a)
+export const subscribeToDmThread = (...a) => backend.subscribeToDmThread(...a)
+export const subscribeToDmInbox = (...a) => backend.subscribeToDmInbox(...a)
+export const markDmRead = (...a) => backend.markDmRead(...a)
+export const listBlocked = (...a) => backend.listBlocked(...a)
+export const blockMember = (...a) => backend.blockMember(...a)
+export const unblockMember = (...a) => backend.unblockMember(...a)
 
 /** Demo only — live mode manages profiles server-side. */
 export const upsertDemoMember = (user) => {

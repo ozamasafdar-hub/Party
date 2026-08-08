@@ -18,6 +18,7 @@ import LoginPanel from '@/components/auth/LoginPanel.vue'
 import MapStyleControl from '@/components/map/MapStyleControl.vue'
 import MapSearchBar from '@/components/map/MapSearchBar.vue'
 import MapSearchPanel from '@/components/map/MapSearchPanel.vue'
+import DmPanel from '@/components/dm/DmPanel.vue'
 import TimePills from '@/components/map/TimePills.vue'
 import HostProModal from '@/components/pro/HostProModal.vue'
 import StoryViewer from '@/components/memories/StoryViewer.vue'
@@ -28,6 +29,7 @@ import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useNotifStore } from '@/stores/notifStore'
 import { useFollowStore } from '@/stores/followStore'
+import { useDmStore } from '@/stores/dmStore'
 import { BASEMAPS, DEFAULT_BASEMAP } from '@/config/map'
 
 const route = useRoute()
@@ -36,6 +38,7 @@ const eventStore = useEventStore()
 const authStore = useAuthStore()
 const notifStore = useNotifStore()
 const followStore = useFollowStore()
+const dmStore = useDmStore()
 
 const STYLE_KEY = 'wyn:map-style'
 const HEAT_KEY = 'wyn:map-heat'
@@ -117,12 +120,17 @@ let soonTimer = null
 
 onMounted(async () => {
   await eventStore.load()
-  if (authStore.currentUser) followStore.load(authStore.currentUser.id)
+  if (authStore.currentUser) {
+    followStore.load(authStore.currentUser.id)
+    startDms()
+  }
   // Shared link: /e/<id> lands with that event's card open
   if (route.name === 'event-link' && route.params.id) {
     const exists = eventStore.events.some((e) => e.id === route.params.id)
     if (exists) eventStore.select(route.params.id)
   }
+  // ?dm=<memberId> lands with that conversation open
+  if (route.query.dm) openMessages(route.query.dm)
   // Starting-soon reminders for events I've joined
   soonTimer = setInterval(() => {
     notifStore.checkStartingSoon(eventStore.events, authStore.currentUser?.id)
@@ -266,6 +274,7 @@ async function onLoginSuccess() {
   const create = pendingCreate.value
   closeLogin()
   followStore.load(authStore.currentUser.id)
+  startDms()
   // Refetch with the authenticated session: the snapshot (and realtime
   // socket) from before login only saw what visitors are allowed to see.
   eventStore.stopRealtime()
@@ -323,6 +332,7 @@ function toggleList() {
   showList.value = !showList.value
   if (showList.value) {
     showSearch.value = false
+    showMessages.value = false
     eventStore.clearSelection()
   }
 }
@@ -334,7 +344,10 @@ function toggleList() {
 
 function toggleSearch() {
   showSearch.value = !showSearch.value
-  if (showSearch.value) showList.value = false
+  if (showSearch.value) {
+    showList.value = false
+    showMessages.value = false
+  }
 }
 
 function onSearchEvent(eventId) {
@@ -352,6 +365,45 @@ function onSearchPerson(memberId) {
     return
   }
   router.push(`/profile/${memberId}`)
+}
+
+/* --- direct messages ------------------------------------------------------
+ * The inbox watch runs for the whole signed-in session so unread counts
+ * stay live wherever you are; the panel itself is just another sibling in
+ * the map stack, mutually exclusive with search and the list.
+ */
+
+const showMessages = ref(false)
+const dmWith = ref('')
+
+function startDms() {
+  const me = authStore.currentUser
+  if (!me) return
+  dmStore.loadInbox(me.id)
+  dmStore.watchInbox(me.id, (message) => {
+    const name = eventStore.memberById(message.senderId)?.name || 'Someone'
+    notifStore.announceDm(message, name)
+  })
+}
+
+function openMessages(peerId = '') {
+  if (!authStore.isAuthenticated) {
+    openLogin('Sign in to send a message.')
+    return
+  }
+  dmWith.value = typeof peerId === 'string' ? peerId : ''
+  showSearch.value = false
+  showList.value = false
+  eventStore.clearSelection()
+  showMessages.value = true
+}
+
+function closeMessages() {
+  showMessages.value = false
+  dmWith.value = ''
+  dmStore.close()
+  // Drop ?dm= so a refresh doesn't reopen the conversation
+  if (route.query.dm) router.replace({ name: 'map' })
 }
 
 /** A place isn't a pin — just fly the camera there. */
@@ -378,7 +430,12 @@ function onSearchPlace(place) {
       @fallback="onTileFallback"
     />
 
-    <TopBar @signin="openLogin('')" @home="goHome" @filter-changed="onFilterChanged" />
+    <TopBar
+      @signin="openLogin('')"
+      @home="goHome"
+      @filter-changed="onFilterChanged"
+      @messages="openMessages"
+    />
 
     <!-- Floating map controls -->
     <div class="map-view__controls">
@@ -542,6 +599,13 @@ function onSearchPlace(place) {
           @select="onSelect"
           @need-location="liveMap?.locateMe()"
         />
+      </div>
+    </Transition>
+
+    <!-- Direct messages -->
+    <Transition name="slide-up">
+      <div v-if="showMessages" class="map-view__list">
+        <DmPanel :open-with="dmWith" @close="closeMessages" />
       </div>
     </Transition>
 

@@ -11,7 +11,9 @@ import { formatCountdown } from '@/utils/datetime'
  */
 export const useNotifStore = defineStore('notifications', {
   state: () => ({
-    items: [], // { id, text, eventId, at, read }
+    // { id, text, eventId, dm, at, read } — `dm` is { threadId, peerId }
+    // for message alerts, which route to a conversation instead of a pin
+    items: [],
     soonNotified: new Set(),
     toast: '',
     toastTimer: null
@@ -22,15 +24,24 @@ export const useNotifStore = defineStore('notifications', {
   },
 
   actions: {
-    push(text, eventId) {
+    push(text, eventId, dm = null) {
       this.items.unshift({
         id: `n-${Date.now().toString(36)}-${this.items.length}`,
         text,
         eventId,
+        dm,
         at: new Date().toISOString(),
         read: false
       })
       if (this.items.length > 30) this.items.length = 30
+    },
+
+    /** A direct message arrived while I was somewhere else in the app. */
+    announceDm(message, senderName) {
+      this.push(`💬 ${senderName} sent you a message`, null, {
+        threadId: message.threadId,
+        peerId: message.senderId
+      })
     },
 
     markAllRead() {

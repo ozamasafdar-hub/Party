@@ -5,7 +5,7 @@
  * with waitlist, the Join / RSVP action, and the event chat thread.
  */
 import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useChatStore } from '@/stores/chatStore'
@@ -26,6 +26,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'edit', 'login-required'])
 
+const router = useRouter()
 const eventStore = useEventStore()
 const authStore = useAuthStore()
 const chatStore = useChatStore()
@@ -104,6 +105,16 @@ const proBlocked = computed(
 )
 
 const followingHost = computed(() => followStore.isFollowing(props.event.hostId))
+
+/** Ask the host a question without joining — opens the DM panel. */
+function messageHost() {
+  if (!authStore.isAuthenticated) {
+    emit('login-required')
+    return
+  }
+  emit('close')
+  router.push({ name: 'map', query: { dm: props.event.hostId } })
+}
 
 async function toggleFollowHost() {
   if (!authStore.isAuthenticated) {
@@ -490,6 +501,15 @@ onBeforeUnmount(() => chatStore.close())
         @click="toggleFollowHost"
       >
         {{ followingHost ? '✓ Following' : '⭐ Follow' }}
+      </button>
+      <button
+        v-if="!isHost"
+        class="event-card__dm"
+        title="Message the host"
+        aria-label="Message the host"
+        @click="messageHost"
+      >
+        💬
       </button>
     </div>
 
@@ -987,6 +1007,24 @@ onBeforeUnmount(() => chatStore.close())
 
 .event-card__follow:hover {
   background: rgba(212, 175, 106, 0.2);
+}
+
+/* Ask the host something without joining first */
+.event-card__dm {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  font-size: 15px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--border-subtle);
+  transition: background 0.15s ease;
+}
+
+.event-card__dm:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .event-card__follow--on {

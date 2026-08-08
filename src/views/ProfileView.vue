@@ -9,6 +9,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useEventStore } from '@/stores/eventStore'
 import { useFollowStore } from '@/stores/followStore'
+import { useDmStore } from '@/stores/dmStore'
 import { pinColorOf } from '@/config/categories'
 import { formatWhen } from '@/utils/datetime'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
@@ -20,6 +21,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const eventStore = useEventStore()
 const followStore = useFollowStore()
+const dmStore = useDmStore()
 
 // Optional chaining throughout: signing out nulls currentUser while this
 // view is still mounted, a tick before the router leaves it.
@@ -87,7 +89,13 @@ function openEvent(eventId) {
   router.push({ name: 'map' })
 }
 
+/** The messages panel lives on the map, so hand it the peer as a query. */
+function messageMember() {
+  router.push({ name: 'map', query: { dm: viewedId.value } })
+}
+
 function logout() {
+  dmStore.reset()
   authStore.logout()
   router.push({ name: 'map' })
 }
@@ -143,15 +151,19 @@ function logout() {
               </button>
               <button class="btn-ghost profile__logout" @click="logout">Sign out</button>
             </template>
-            <button
-              v-else
-              class="profile__follow"
-              :class="following ? 'btn-ghost' : 'btn-primary'"
-              :disabled="followBusy"
-              @click="toggleFollow"
-            >
-              {{ following ? '✓ Following' : '⭐ Follow' }}
-            </button>
+            <template v-else>
+              <button
+                class="profile__follow"
+                :class="following ? 'btn-ghost' : 'btn-primary'"
+                :disabled="followBusy"
+                @click="toggleFollow"
+              >
+                {{ following ? '✓ Following' : '⭐ Follow' }}
+              </button>
+              <button class="btn-ghost profile__message" @click="messageMember">
+                💬 Message
+              </button>
+            </template>
           </div>
         </header>
 

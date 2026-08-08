@@ -5,6 +5,7 @@ import { CATEGORIES } from '@/config/categories'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useNotifStore } from '@/stores/notifStore'
+import { useDmStore } from '@/stores/dmStore'
 import { timeAgo } from '@/utils/datetime'
 import { isDemoForced } from '@/services/supabaseClient'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
@@ -13,8 +14,9 @@ import WynLogo from '@/components/ui/WynLogo.vue'
 const eventStore = useEventStore()
 const authStore = useAuthStore()
 const notifStore = useNotifStore()
+const dmStore = useDmStore()
 
-const emit = defineEmits(['signin', 'home', 'filter-changed'])
+const emit = defineEmits(['signin', 'home', 'filter-changed', 'messages'])
 
 function pickCategory(key, label) {
   eventStore.setCategory(key)
@@ -42,7 +44,9 @@ function toggleNotifs() {
 
 function openNotif(notif) {
   showNotifs.value = false
-  if (notif.eventId) eventStore.select(notif.eventId)
+  // Message alerts open the conversation; everything else opens the pin
+  if (notif.dm?.peerId) emit('messages', notif.dm.peerId)
+  else if (notif.eventId) eventStore.select(notif.eventId)
 }
 
 /** Leading emoji becomes the row's icon bubble; falls back to a bell. */
@@ -93,6 +97,39 @@ function notifBody(text) {
         </span>
       </button>
     </nav>
+
+    <button
+      v-if="authStore.currentUser"
+      class="top-bar__mail"
+      :title="`Messages${dmStore.unreadTotal ? ` (${dmStore.unreadTotal} new)` : ''}`"
+      @click="emit('messages')"
+    >
+      <svg viewBox="0 0 24 24" class="top-bar__mail-icon" aria-hidden="true">
+        <rect x="2.5" y="5" width="19" height="14" rx="3.2" fill="url(#wyn-mail)" />
+        <path
+          d="M4 8.2 12 13l8-4.8"
+          fill="none"
+          stroke="#0b0f19"
+          stroke-width="1.7"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          opacity="0.75"
+        />
+        <defs>
+          <linearGradient id="wyn-mail" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#f4e9c9" />
+            <stop offset="1" stop-color="#d4af6a" />
+          </linearGradient>
+        </defs>
+      </svg>
+      <span
+        v-if="dmStore.unreadTotal"
+        :key="dmStore.unreadTotal"
+        class="top-bar__bell-badge"
+      >
+        {{ dmStore.unreadTotal }}
+      </span>
+    </button>
 
     <div v-if="authStore.currentUser" class="top-bar__bell-wrap">
       <button
@@ -378,7 +415,8 @@ function notifBody(text) {
   margin-left: auto;
 }
 
-.top-bar__bell {
+.top-bar__bell,
+.top-bar__mail {
   position: relative;
   width: 44px;
   height: 44px;
@@ -390,6 +428,25 @@ function notifBody(text) {
   border: 1px solid rgba(255, 255, 255, 0.14);
   backdrop-filter: blur(8px);
   transition: all 0.18s ease;
+}
+
+/* The mail button takes over pinning the cluster to the right */
+.top-bar__mail {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.top-bar__mail + .top-bar__bell-wrap {
+  margin-left: 0;
+}
+
+.top-bar__mail:hover {
+  border-color: rgba(212, 175, 106, 0.55);
+}
+
+.top-bar__mail-icon {
+  width: 21px;
+  height: 21px;
 }
 
 .top-bar__bell:hover {
