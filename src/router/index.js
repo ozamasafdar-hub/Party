@@ -25,6 +25,13 @@ const router = createRouter({
       component: () => import('@/views/LoginView.vue')
     },
     {
+      // Messages + alerts, a page of their own rather than panels over the map
+      path: '/inbox',
+      name: 'inbox',
+      component: () => import('@/views/InboxView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/profile/:id?',
       name: 'profile',
       component: () => import('@/views/ProfileView.vue'),

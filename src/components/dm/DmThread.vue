@@ -17,7 +17,7 @@ const props = defineProps({
   peer: { type: Object, required: true }
 })
 
-const emit = defineEmits(['back', 'close'])
+const emit = defineEmits(['back'])
 
 const dmStore = useDmStore()
 const authStore = useAuthStore()
@@ -99,7 +99,6 @@ async function toggleBlock() {
           </button>
         </div>
       </div>
-      <button class="dm-thread__close" aria-label="Close" @click="emit('close')">✕</button>
     </header>
 
     <div ref="body" class="dm-thread__body">
@@ -193,8 +192,7 @@ async function toggleBlock() {
   flex-shrink: 0;
 }
 
-.dm-thread__menu-btn,
-.dm-thread__close {
+.dm-thread__menu-btn {
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -202,8 +200,7 @@ async function toggleBlock() {
   font-size: 13px;
 }
 
-.dm-thread__menu-btn:hover,
-.dm-thread__close:hover {
+.dm-thread__menu-btn:hover {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
 }
@@ -233,8 +230,8 @@ async function toggleBlock() {
 
 .dm-thread__body {
   flex: 1;
-  min-height: 160px;
-  max-height: 320px;
+  min-height: 200px;
+  max-height: min(52vh, 460px);
   overflow-y: auto;
   display: flex;
   flex-direction: column;

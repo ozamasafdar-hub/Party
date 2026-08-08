@@ -18,13 +18,11 @@ import LoginPanel from '@/components/auth/LoginPanel.vue'
 import MapStyleControl from '@/components/map/MapStyleControl.vue'
 import MapSearchBar from '@/components/map/MapSearchBar.vue'
 import MapSearchPanel from '@/components/map/MapSearchPanel.vue'
-import DmPanel from '@/components/dm/DmPanel.vue'
 import TimePills from '@/components/map/TimePills.vue'
 import HostProModal from '@/components/pro/HostProModal.vue'
 import StoryViewer from '@/components/memories/StoryViewer.vue'
 import MemoryUploadSheet from '@/components/memories/MemoryUploadSheet.vue'
 import { useHostPermissions } from '@/composables/useHostPermissions'
-import { useOverlayBack } from '@/composables/useOverlayBack'
 import { inMemoryWindow } from '@/utils/datetime'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -130,8 +128,6 @@ onMounted(async () => {
     const exists = eventStore.events.some((e) => e.id === route.params.id)
     if (exists) eventStore.select(route.params.id)
   }
-  // ?dm=<memberId> lands with that conversation open
-  if (route.query.dm) openMessages(route.query.dm)
   // ?recap=<eventId> opens that event's story straight from the profile
   if (route.query.recap) openRecap(route.query.recap)
   // Starting-soon reminders for events I've joined
@@ -145,6 +141,20 @@ onBeforeUnmount(() => {
   clearInterval(soonTimer)
   eventStore.stopRealtime()
 })
+
+/**
+ * A tap on empty map dismisses whatever is open — the card, the list, the
+ * search panel — the way tapping outside a sheet does everywhere else.
+ * Modals with their own backdrop (create, login, story) can't be reached
+ * by a map tap in the first place, so they are left alone.
+ */
+function onMapTap() {
+  if (pickMode.value) return
+  eventStore.clearSelection()
+  showList.value = false
+  showSearch.value = false
+  showStylePanel.value = false
+}
 
 function onSelect(eventId) {
   if (pickMode.value) return
@@ -341,69 +351,10 @@ function onEdit(event) {
   showCreateModal.value = true
 }
 
-/* --- back gesture ---------------------------------------------------------
- * Sheets stack in this order (last = on top), so the phone's back gesture
- * peels them off one at a time instead of leaving the app.
- */
-const openSheets = computed(() => {
-  const stack = []
-  if (showList.value) stack.push('list')
-  if (showSearch.value) stack.push('search')
-  if (showMessages.value) stack.push('messages')
-  if (showMessages.value && dmStore.openThreadId) stack.push('thread')
-  if (selectedEvent.value) stack.push('card')
-  if (showCreateModal.value) stack.push('create')
-  if (pickingLocation.value) stack.push('pick')
-  if (storyEvent.value) stack.push('story')
-  if (uploadEvent.value) stack.push('upload')
-  if (showLogin.value) stack.push('login')
-  if (showProModal.value) stack.push('pro')
-  return stack
-})
-
-function closeTopSheet() {
-  switch (openSheets.value[openSheets.value.length - 1]) {
-    case 'pro':
-      showProModal.value = false
-      break
-    case 'login':
-      closeLogin()
-      break
-    case 'upload':
-      uploadEvent.value = null
-      break
-    case 'story':
-      storyEvent.value = null
-      break
-    case 'pick':
-      stopPickingLocation()
-      break
-    case 'create':
-      onModalClose()
-      break
-    case 'card':
-      eventStore.clearSelection()
-      break
-    case 'thread':
-      dmStore.close()
-      break
-    case 'messages':
-      closeMessages()
-      break
-    case 'search':
-      showSearch.value = false
-      break
-    case 'list':
-      showList.value = false
-      break
-  }
-}
-
 function toggleList() {
   showList.value = !showList.value
   if (showList.value) {
     showSearch.value = false
-    showMessages.value = false
     eventStore.clearSelection()
   }
 }
@@ -415,10 +366,7 @@ function toggleList() {
 
 function toggleSearch() {
   showSearch.value = !showSearch.value
-  if (showSearch.value) {
-    showList.value = false
-    showMessages.value = false
-  }
+  if (showSearch.value) showList.value = false
 }
 
 function onSearchEvent(eventId) {
@@ -444,9 +392,6 @@ function onSearchPerson(memberId) {
  * the map stack, mutually exclusive with search and the list.
  */
 
-const showMessages = ref(false)
-const dmWith = ref('')
-
 function startDms() {
   const me = authStore.currentUser
   if (!me) return
@@ -457,25 +402,6 @@ function startDms() {
   })
 }
 
-function openMessages(peerId = '') {
-  if (!authStore.isAuthenticated) {
-    openLogin('Sign in to send a message.')
-    return
-  }
-  dmWith.value = typeof peerId === 'string' ? peerId : ''
-  showSearch.value = false
-  showList.value = false
-  eventStore.clearSelection()
-  showMessages.value = true
-}
-
-function closeMessages() {
-  showMessages.value = false
-  dmWith.value = ''
-  dmStore.close()
-  // Drop ?dm= so a refresh doesn't reopen the conversation
-  if (route.query.dm) router.replace({ name: 'map' })
-}
 
 /** A place isn't a pin — just fly the camera there. */
 function onSearchPlace(place) {
@@ -484,12 +410,6 @@ function onSearchPlace(place) {
   liveMap.value?.flyTo(place.lat, place.lng)
   notifStore.flash(`📍 ${place.name}`)
 }
-
-// Set up last: it reads every sheet's state on the first tick
-useOverlayBack(
-  computed(() => openSheets.value.length),
-  closeTopSheet
-)
 </script>
 
 <template>
@@ -504,6 +424,7 @@ useOverlayBack(
       :memory-mode="eventStore.mapMode === 'memories'"
       @select="onSelect"
       @pick="onPick"
+      @tap="onMapTap"
       @fallback="onTileFallback"
     />
 
@@ -511,7 +432,6 @@ useOverlayBack(
       @signin="openLogin('')"
       @home="goHome"
       @filter-changed="onFilterChanged"
-      @messages="openMessages"
     />
 
     <!-- Floating map controls -->
@@ -676,13 +596,6 @@ useOverlayBack(
           @select="onSelect"
           @need-location="liveMap?.locateMe()"
         />
-      </div>
-    </Transition>
-
-    <!-- Direct messages -->
-    <Transition name="slide-up">
-      <div v-if="showMessages" class="map-view__list">
-        <DmPanel :open-with="dmWith" @close="closeMessages" />
       </div>
     </Transition>
 

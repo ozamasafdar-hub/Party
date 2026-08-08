@@ -126,14 +126,14 @@ const proBlocked = computed(
 
 const followingHost = computed(() => followStore.isFollowing(props.event.hostId))
 
-/** Ask the host a question without joining — opens the DM panel. */
+/** Ask the host a question without joining — opens the conversation. */
 function messageHost() {
   if (!authStore.isAuthenticated) {
     emit('login-required')
     return
   }
   emit('close')
-  router.push({ name: 'map', query: { dm: props.event.hostId } })
+  router.push({ name: 'inbox', query: { to: props.event.hostId } })
 }
 
 async function toggleFollowHost() {

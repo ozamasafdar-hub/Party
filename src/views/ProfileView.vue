@@ -141,9 +141,8 @@ function openEvent(eventId) {
   router.push({ name: 'map' })
 }
 
-/** The messages panel lives on the map, so hand it the peer as a query. */
 function messageMember() {
-  router.push({ name: 'map', query: { dm: viewedId.value } })
+  router.push({ name: 'inbox', query: { to: viewedId.value } })
 }
 
 function logout() {

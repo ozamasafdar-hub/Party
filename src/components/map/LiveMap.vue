@@ -36,7 +36,7 @@ const props = defineProps({
   memoryMode: { type: Boolean, default: false } // 📸 past-24h recap layer
 })
 
-const emit = defineEmits(['select', 'pick', 'fallback'])
+const emit = defineEmits(['select', 'pick', 'fallback', 'tap'])
 
 const mapEl = ref(null)
 
@@ -270,7 +270,13 @@ function escapeHtml(text) {
 /* --- interactions -------------------------------------------------------- */
 
 function onMapClick(e) {
-  if (!props.pickMode) return
+  if (!props.pickMode) {
+    // Leaflet only fires this for the map itself — marker and cluster
+    // clicks are handled on those layers — so a tap here means "empty map",
+    // which the parent treats as dismissing whatever is open.
+    emit('tap')
+    return
+  }
   placeDraftPin(e.latlng)
   emit('pick', { lat: e.latlng.lat, lng: e.latlng.lng })
 }
