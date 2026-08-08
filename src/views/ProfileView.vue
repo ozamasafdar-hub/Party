@@ -4,14 +4,14 @@
  * hosted / attending events. Shows your own profile (with Edit + Sign
  * out) or any other member's (with Follow / Unfollow), via /profile/:id.
  */
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useEventStore } from '@/stores/eventStore'
 import { useFollowStore } from '@/stores/followStore'
 import { useDmStore } from '@/stores/dmStore'
 import { pinColorOf } from '@/config/categories'
-import { formatWhen } from '@/utils/datetime'
+import { formatWhen, hasEnded, inMemoryWindow, memoryHoursLeft } from '@/utils/datetime'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
 import EditProfileModal from '@/components/profile/EditProfileModal.vue'
 import HostProModal from '@/components/pro/HostProModal.vue'
@@ -36,6 +36,54 @@ const member = computed(() =>
 const hosted = computed(() => eventStore.hostedBy(viewedId.value))
 const attended = computed(() => eventStore.attendedBy(viewedId.value))
 const following = computed(() => followStore.isFollowing(viewedId.value))
+
+/* An event that has finished isn't something you're "hosting" or
+ * "attending" any more, so the two live sections only carry what's still
+ * ahead and everything else drops into Past. The clock ticks so an event
+ * moves across on its own while the page is open. */
+const now = ref(new Date())
+let clock = null
+
+const soonestFirst = (a, b) => new Date(a.startsAt) - new Date(b.startsAt)
+const latestFirst = (a, b) => new Date(b.startsAt) - new Date(a.startsAt)
+
+const upcomingHosted = computed(() =>
+  hosted.value.filter((e) => !hasEnded(e, now.value)).sort(soonestFirst)
+)
+const upcomingAttended = computed(() =>
+  attended.value.filter((e) => !hasEnded(e, now.value)).sort(soonestFirst)
+)
+const pastHosted = computed(() =>
+  hosted.value.filter((e) => hasEnded(e, now.value)).sort(latestFirst)
+)
+const pastAttended = computed(() =>
+  attended.value.filter((e) => hasEnded(e, now.value)).sort(latestFirst)
+)
+
+/* Recaps: an event that ended in the last 24h with photos on it still has
+ * a live story. Past rows surface it while it lasts, then it lapses. */
+function recapOf(event) {
+  if (!inMemoryWindow(event, now.value)) return null
+  const count = eventStore.memoriesFor(event.id).length
+  if (!count) return null
+  return { count, hoursLeft: memoryHoursLeft(event, now.value) }
+}
+
+function openRecap(event) {
+  router.push({ name: 'map', query: { recap: event.id } })
+}
+
+/* Long histories collapse — each past list keeps its own toggle. */
+const PAST_PREVIEW = 5
+const expanded = ref({})
+
+function shown(key, events) {
+  return expanded.value[key] ? events : events.slice(0, PAST_PREVIEW)
+}
+
+function toggleExpanded(key) {
+  expanded.value = { ...expanded.value, [key]: !expanded.value[key] }
+}
 
 const showEdit = ref(false)
 const showPro = ref(false)
@@ -67,10 +115,14 @@ onMounted(async () => {
   if (!eventStore.events.length) eventStore.load()
   if (me.value) await followStore.load(me.value.id)
   loadGraph()
+  clock = setInterval(() => (now.value = new Date()), 60000)
 })
+
+onBeforeUnmount(() => clearInterval(clock))
 
 watch(viewedId, () => {
   graphTab.value = null
+  expanded.value = {}
   loadGraph()
 })
 
@@ -122,7 +174,7 @@ function logout() {
             </p>
             <p class="profile__stats">
               <span><strong>{{ hosted.length }}</strong> hosted</span>
-              <span><strong>{{ attended.length }}</strong> attending</span>
+              <span><strong>{{ upcomingAttended.length }}</strong> attending</span>
               <button
                 class="profile__stat-btn"
                 :class="{ 'profile__stat-btn--on': graphTab === 'followers' }"
@@ -193,29 +245,52 @@ function logout() {
         </Transition>
 
         <section v-for="group in [
-            { title: '🎉 Hosting', events: hosted, empty: isSelf ? 'You haven\'t hosted anything yet — create an event from the map!' : 'No events hosted yet.' },
-            { title: '✅ Attending', events: attended, empty: isSelf ? 'No RSVPs yet. Tap a pin on the map to join an event.' : 'Not attending anything yet.' }
+            { key: 'hosted', title: '🏁 Hosted', events: pastHosted, past: true, empty: '' },
+            { key: 'hosting', title: '🎉 Hosting', events: upcomingHosted, past: false, empty: isSelf ? 'Nothing coming up — create an event from the map!' : 'Nothing coming up.' },
+            { key: 'attending', title: '✅ Attending', events: upcomingAttended, past: false, empty: isSelf ? 'No RSVPs yet. Tap a pin on the map to join an event.' : 'Not attending anything yet.' },
+            { key: 'went', title: '🕓 Went', events: pastAttended, past: true, empty: '' }
           ]"
-          :key="group.title"
+          v-show="group.events.length || !group.past"
+          :key="group.key"
           class="profile__section"
         >
           <h2 class="profile__section-title">{{ group.title }}</h2>
           <p v-if="!group.events.length" class="profile__empty glass-panel">{{ group.empty }}</p>
           <button
-            v-for="event in group.events"
+            v-for="event in shown(group.key, group.events)"
             :key="event.id"
             class="profile__event glass-panel"
+            :class="{ 'profile__event--past': group.past }"
             @click="openEvent(event.id)"
           >
             <span class="profile__event-dot" :style="{ background: pinColorOf(event) }" />
             <span class="profile__event-body">
               <span class="profile__event-title">{{ event.title }}</span>
               <span class="profile__event-meta">
-                {{ event.locationName }} · {{ formatWhen(event.startsAt) }} ·
-                {{ event.attendeeIds.length }}/{{ event.maxCapacity }} going
+                {{ event.locationName }} · {{ formatWhen(event.startsAt) }}
+                <template v-if="!group.past">
+                  · {{ event.attendeeIds.length }}/{{ event.maxCapacity }} going
+                </template>
               </span>
             </span>
-            <span class="profile__event-arrow">→</span>
+            <!-- Ended in the last 24h with photos on it: the recap is still live -->
+            <span
+              v-if="recapOf(event)"
+              class="profile__recap"
+              role="button"
+              :title="`${recapOf(event).count} recap post${recapOf(event).count === 1 ? '' : 's'}`"
+              @click.stop="openRecap(event)"
+            >
+              📸 {{ recapOf(event).count }} · {{ recapOf(event).hoursLeft }}h left
+            </span>
+            <span v-else-if="!group.past" class="profile__event-arrow">→</span>
+          </button>
+          <button
+            v-if="group.events.length > PAST_PREVIEW"
+            class="profile__past-more"
+            @click="toggleExpanded(group.key)"
+          >
+            {{ expanded[group.key] ? 'Show less' : `Show all ${group.events.length}` }}
           </button>
         </section>
       </template>
@@ -470,5 +545,44 @@ function logout() {
 .profile__event-arrow {
   color: var(--text-secondary);
   flex-shrink: 0;
+}
+
+/* Finished events sit back a step so what's coming up reads first */
+.profile__event--past {
+  opacity: 0.72;
+}
+
+.profile__event--past:hover {
+  opacity: 1;
+}
+
+/* A recap that is still inside its 24h window — tap to watch it */
+.profile__recap {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: #0b0f19;
+  background: linear-gradient(120deg, #a78bfa, #d4af6a);
+  cursor: pointer;
+}
+
+.profile__past-more {
+  display: block;
+  margin: 2px auto 10px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+}
+
+.profile__past-more:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.11);
 }
 </style>

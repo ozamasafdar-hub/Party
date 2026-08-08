@@ -131,6 +131,8 @@ onMounted(async () => {
   }
   // ?dm=<memberId> lands with that conversation open
   if (route.query.dm) openMessages(route.query.dm)
+  // ?recap=<eventId> opens that event's story straight from the profile
+  if (route.query.recap) openRecap(route.query.recap)
   // Starting-soon reminders for events I've joined
   soonTimer = setInterval(() => {
     notifStore.checkStartingSoon(eventStore.events, authStore.currentUser?.id)
@@ -159,6 +161,15 @@ function onSelect(eventId) {
 
 const storyEvent = ref(null)
 const uploadEvent = ref(null)
+
+/** Opened from a profile's Hosted/Went row while the recap is still live. */
+function openRecap(eventId) {
+  const event = eventStore.events.find((e) => e.id === eventId)
+  if (!event) return
+  eventStore.setMapMode('memories')
+  storyEvent.value = event
+  if (route.query.recap) router.replace({ name: 'map' })
+}
 
 const readDismissed = () => {
   try {
