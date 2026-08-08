@@ -24,6 +24,7 @@ import HostProModal from '@/components/pro/HostProModal.vue'
 import StoryViewer from '@/components/memories/StoryViewer.vue'
 import MemoryUploadSheet from '@/components/memories/MemoryUploadSheet.vue'
 import { useHostPermissions } from '@/composables/useHostPermissions'
+import { useOverlayBack } from '@/composables/useOverlayBack'
 import { inMemoryWindow } from '@/utils/datetime'
 import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -340,6 +341,64 @@ function onEdit(event) {
   showCreateModal.value = true
 }
 
+/* --- back gesture ---------------------------------------------------------
+ * Sheets stack in this order (last = on top), so the phone's back gesture
+ * peels them off one at a time instead of leaving the app.
+ */
+const openSheets = computed(() => {
+  const stack = []
+  if (showList.value) stack.push('list')
+  if (showSearch.value) stack.push('search')
+  if (showMessages.value) stack.push('messages')
+  if (showMessages.value && dmStore.openThreadId) stack.push('thread')
+  if (selectedEvent.value) stack.push('card')
+  if (showCreateModal.value) stack.push('create')
+  if (pickingLocation.value) stack.push('pick')
+  if (storyEvent.value) stack.push('story')
+  if (uploadEvent.value) stack.push('upload')
+  if (showLogin.value) stack.push('login')
+  if (showProModal.value) stack.push('pro')
+  return stack
+})
+
+function closeTopSheet() {
+  switch (openSheets.value[openSheets.value.length - 1]) {
+    case 'pro':
+      showProModal.value = false
+      break
+    case 'login':
+      closeLogin()
+      break
+    case 'upload':
+      uploadEvent.value = null
+      break
+    case 'story':
+      storyEvent.value = null
+      break
+    case 'pick':
+      stopPickingLocation()
+      break
+    case 'create':
+      onModalClose()
+      break
+    case 'card':
+      eventStore.clearSelection()
+      break
+    case 'thread':
+      dmStore.close()
+      break
+    case 'messages':
+      closeMessages()
+      break
+    case 'search':
+      showSearch.value = false
+      break
+    case 'list':
+      showList.value = false
+      break
+  }
+}
+
 function toggleList() {
   showList.value = !showList.value
   if (showList.value) {
@@ -425,6 +484,12 @@ function onSearchPlace(place) {
   liveMap.value?.flyTo(place.lat, place.lng)
   notifStore.flash(`📍 ${place.name}`)
 }
+
+// Set up last: it reads every sheet's state on the first tick
+useOverlayBack(
+  computed(() => openSheets.value.length),
+  closeTopSheet
+)
 </script>
 
 <template>
