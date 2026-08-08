@@ -402,6 +402,10 @@ onBeforeUnmount(() => chatStore.close())
 
 <template>
   <article class="event-card glass-panel">
+    <!-- Outside the scroller, so it stays reachable however far you scroll -->
+    <button class="event-card__close" aria-label="Close" @click="emit('close')">✕</button>
+
+    <div class="event-card__scroll">
     <img
       v-if="photos.length"
       :src="photos[Math.min(photoIndex, photos.length - 1)]"
@@ -420,8 +424,6 @@ onBeforeUnmount(() => chatStore.close())
         <img :src="photo" alt="" />
       </button>
     </div>
-
-    <button class="event-card__close" aria-label="Close" @click="emit('close')">✕</button>
 
     <header class="event-card__header">
       <span class="event-card__badge" :style="{ background: category.color }">
@@ -749,6 +751,7 @@ onBeforeUnmount(() => chatStore.close())
         </div>
       </template>
     </footer>
+    </div>
   </article>
 
   <CheckoutModal
@@ -766,11 +769,23 @@ onBeforeUnmount(() => chatStore.close())
 </template>
 
 <style scoped>
+/* The card is the frame; only its inner column scrolls, so the close
+   button can sit on the frame and stay put however far you scroll. */
 .event-card {
   position: relative;
   width: min(420px, calc(100vw - 24px));
   max-height: min(78vh, 640px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.event-card__scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 22px;
 }
 
@@ -830,10 +845,18 @@ onBeforeUnmount(() => chatStore.close())
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: rgba(17, 24, 39, 0.6);
-  color: var(--text-secondary);
+  /* Sits over the cover photo as well as plain panel, so it carries its
+     own backdrop rather than borrowing the card's */
+  background: rgba(11, 15, 25, 0.72);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
   font-size: 13px;
-  z-index: 1;
+  z-index: 4;
+}
+
+.event-card__close:hover {
+  background: rgba(11, 15, 25, 0.9);
 }
 
 .event-card__close:hover {

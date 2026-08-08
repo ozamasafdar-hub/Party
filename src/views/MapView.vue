@@ -900,6 +900,14 @@ function onSearchPlace(place) {
     border-left: none;
     border-right: none;
     border-bottom: none;
+  }
+
+  /* Padding lives on the card's scroller now, so clear the home bar there */
+  .map-view__sheet :deep(.event-card__scroll) {
+    padding-bottom: max(22px, env(safe-area-inset-bottom));
+  }
+
+  .map-view__list :deep(.event-list) {
     padding-bottom: max(22px, env(safe-area-inset-bottom));
   }
 
