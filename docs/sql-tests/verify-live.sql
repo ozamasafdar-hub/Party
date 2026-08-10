@@ -96,6 +96,36 @@ with checks(sort, label, ok) as (
          pg_get_functiondef(p.oid) like '%new.user_id <> ev.host_id%'
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname = 'enforce_event_capacity'
+
+  -- Migration 013: the value the ladies-only gate reads
+  union all
+  select 15, 'gender is frozen once set               (migration 013)',
+         exists (
+           select 1 from pg_trigger
+            where tgname = 'profiles_freeze_gender'
+              and tgrelid = 'public.profiles'::regclass
+              and not tgisinternal
+         )
+
+  union all
+  select 16, 'an admin can still correct a mistake',
+         exists (
+           select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = 'public' and p.proname = 'set_member_gender'
+         )
+
+  union all
+  select 17, 'sign-up carries gender into the profile',
+         pg_get_functiondef(p.oid) like '%gender%'
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'handle_new_user'
+
+  union all
+  -- Anyone still holding null simply cannot see women-only events until
+  -- they answer the prompt. Informational, not a failure.
+  select 18, 'members still to answer: ' ||
+             (select count(*)::text from public.profiles where gender is null),
+         true
 )
 select case when ok then 'PASS' else 'FAIL' end as result, label
   from checks
