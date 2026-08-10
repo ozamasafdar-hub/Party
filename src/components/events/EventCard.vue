@@ -622,7 +622,7 @@ onBeforeUnmount(() => chatStore.close())
             maxlength="500"
             placeholder="Message the group…"
           />
-          <button type="submit" class="btn-primary event-card__chat-send" :disabled="!chatDraft.trim()">
+          <button type="submit" class="btn-primary btn-send event-card__chat-send" :disabled="!chatDraft.trim()">
             ➤
           </button>
         </form>

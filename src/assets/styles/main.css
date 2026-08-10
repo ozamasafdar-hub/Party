@@ -12,6 +12,7 @@
   --text-secondary: #9aa5b8;
   --accent: #8b1538; /* Qatar maroon */
   --accent-bright: #c62d55;
+  --accent-lift: #ff5f8f; /* the maroon lifted for small controls that must catch the eye */
   --gold: #d4af6a;
   --success: #2dd4a0;
   --danger: #f4587a;
@@ -363,6 +364,38 @@ html .leaflet-container {
 
 .scroll-quiet::-webkit-scrollbar {
   display: none;
+}
+
+/**
+ * Send buttons — the round one at the end of a composer.
+ *
+ * A 45px circle carrying a single glyph has far less area to work with
+ * than a full-width button, so the standard maroon gradient reads as a
+ * dull disc on a dark composer row. It gets the lifted accent and a glow
+ * so it is unmistakably the thing to press.
+ *
+ * Empty composer is a state, not a fault: dimming the brand colour to 45%
+ * looked like a broken red button. Inert grey says "nothing to send yet".
+ */
+.btn-send {
+  background: linear-gradient(135deg, var(--accent-bright) 0%, var(--accent-lift) 100%);
+  box-shadow: 0 4px 16px rgba(255, 95, 143, 0.45);
+  color: #fff;
+  /* Carried in both states so enabling it cannot change the button's size */
+  border: 1px solid transparent;
+}
+
+.btn-send:disabled {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  opacity: 1;
+  box-shadow: none;
+}
+
+.btn-send:active:not(:disabled) {
+  transform: scale(0.94);
+  box-shadow: 0 2px 10px rgba(255, 95, 143, 0.5);
 }
 
 /* Transitions -------------------------------------------------------------- */

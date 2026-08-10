@@ -130,7 +130,7 @@ async function toggleBlock() {
         maxlength="2000"
         :placeholder="`Message ${peer.name}…`"
       />
-      <button type="submit" class="btn-primary dm-thread__send" :disabled="!draft.trim() || sending">
+      <button type="submit" class="btn-primary btn-send dm-thread__send" :disabled="!draft.trim() || sending">
         ➤
       </button>
     </form>
