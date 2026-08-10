@@ -1,6 +1,18 @@
--- Local harness: enough of Supabase for docs/database-schema.sql to load.
--- Not shipped, not a substitute for the real thing — it exists so seed files
--- and triggers can be *run* instead of read.
+-- ============================================================================
+-- ⛔ DO NOT RUN THIS IN THE SUPABASE SQL EDITOR ⛔
+--
+-- This is the LOCAL TEST HARNESS. It fakes the parts of Supabase that a
+-- throwaway Postgres does not have — auth.users, storage, a PostGIS shim —
+-- so docs/database-schema.sql can be loaded and the triggers actually run.
+-- Against a real project it would try to create tables that already exist,
+-- and the ones it did create would have no row-level security.
+--
+-- It is driven by docs/sql-tests/run.sh. Nothing here is ever pasted into
+-- a browser.
+--
+-- The file in this folder that IS meant for the SQL editor is
+-- verify-live.sql, which only reads.
+-- ============================================================================
 
 -- Roles are cluster-wide, so they survive a drop database
 do $$

@@ -1,3 +1,8 @@
+-- ============================================================================
+-- Local test harness — run by docs/sql-tests/run.sh, NOT in the Supabase SQL
+-- editor. It writes to and reads from a throwaway database.
+-- ============================================================================
+
 -- Every join gate, exercised against the real trigger. Each case states
 -- what should happen; the run prints PASS/FAIL, not just "no error".
 

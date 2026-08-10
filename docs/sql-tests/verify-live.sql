@@ -1,6 +1,10 @@
 -- ============================================================================
 -- WYN — did the migrations and the seed actually take?
 --
+-- ✅ This one IS for the Supabase SQL editor. It only reads — no table is
+-- created, nothing is written. The other .sql files in this folder are the
+-- local harness and must not be pasted there.
+--
 -- Paste the whole file into the Supabase SQL Editor and run it. It reads
 -- and asserts; it changes nothing. Every row should say PASS.
 --

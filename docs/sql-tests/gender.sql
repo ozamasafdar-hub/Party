@@ -1,4 +1,9 @@
 -- ============================================================================
+-- Local test harness — run by docs/sql-tests/run.sh, NOT in the Supabase SQL
+-- editor. It writes to and reads from a throwaway database.
+-- ============================================================================
+
+-- ============================================================================
 -- The gender freeze, exercised against the real trigger.
 --
 -- The rule is "set once": a null may be filled in, a filled-in value may
