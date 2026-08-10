@@ -172,7 +172,7 @@ function indexOf(kind, i) {
       </button>
     </div>
 
-    <div v-if="term.length >= 2" class="map-search-panel__results">
+    <div v-if="term.length >= 2" class="map-search-panel__results scroll-quiet">
       <template v-if="eventHits.length">
         <p class="map-search-panel__group">Events</p>
         <button

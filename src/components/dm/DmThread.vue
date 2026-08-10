@@ -101,7 +101,7 @@ async function toggleBlock() {
       </div>
     </header>
 
-    <div ref="body" class="dm-thread__body">
+    <div ref="body" class="dm-thread__body scroll-quiet">
       <p v-if="dmStore.loading" class="dm-thread__empty">Loading…</p>
       <p v-else-if="!dmStore.messages.length" class="dm-thread__empty">
         No messages yet — say salam! 👋

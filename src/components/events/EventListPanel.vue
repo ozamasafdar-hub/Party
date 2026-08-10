@@ -84,7 +84,7 @@ function hideBrokenImage(event) {
 </script>
 
 <template>
-  <aside class="event-list glass-panel">
+  <aside class="event-list glass-panel scroll-quiet">
     <header class="event-list__head">
       <h2 class="event-list__title">What's on</h2>
       <button class="event-list__close" aria-label="Close" @click="emit('close')">✕</button>

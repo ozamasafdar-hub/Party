@@ -415,7 +415,7 @@ onBeforeUnmount(() => chatStore.close())
       @click="emit('close')"
     >{{ canGoBack ? '←' : '✕' }}</button>
 
-    <div class="event-card__scroll">
+    <div class="event-card__scroll scroll-quiet">
     <img
       v-if="photos.length"
       :src="photos[Math.min(photoIndex, photos.length - 1)]"
@@ -590,7 +590,7 @@ onBeforeUnmount(() => chatStore.close())
         <span class="event-card__chat-caret">{{ chatOpen ? '▾' : '▸' }}</span>
       </button>
       <div v-if="chatOpen" class="event-card__chat-body-wrap">
-        <div ref="chatBody" class="event-card__chat-body">
+        <div ref="chatBody" class="event-card__chat-body scroll-quiet">
           <p v-if="chatStore.loading" class="event-card__chat-empty">Loading…</p>
           <p v-else-if="!chatStore.messages.length" class="event-card__chat-empty">
             No messages yet — say salam! 👋

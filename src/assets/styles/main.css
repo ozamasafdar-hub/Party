@@ -345,6 +345,26 @@ html .leaflet-container {
   border-radius: 999px;
 }
 
+/**
+ * Panels that float over the map hide their scrollbar. The 8px track above
+ * cuts a pale lane down the inside edge of a dark rounded sheet, and where
+ * the platform uses classic rather than overlay scrollbars it also takes
+ * those 8px away from the content — so the sheet stops reaching its own
+ * edge. Scrolling is untouched; only the bar goes. The horizontal chip rows
+ * already did this locally, this just names it once.
+ *
+ * Full pages keep their scrollbar: there it is the only clue about how much
+ * more there is to read.
+ */
+.scroll-quiet {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scroll-quiet::-webkit-scrollbar {
+  display: none;
+}
+
 /* Transitions -------------------------------------------------------------- */
 
 .slide-up-enter-active,
