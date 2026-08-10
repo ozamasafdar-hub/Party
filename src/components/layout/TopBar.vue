@@ -63,31 +63,104 @@ watch(
 
 <template>
   <header class="top-bar">
-    <button
-      class="top-bar__brand"
-      title="Back to the full Qatar view"
-      @click="$emit('home')"
-    >
-      <span class="top-bar__logo"><WynLogo :size="42" /></span>
-      <div class="top-bar__brand-text">
-        <div class="top-bar__name">
-          WYN <span v-if="isDemoForced" class="top-bar__demo-badge">DEMO</span>
+    <div class="top-bar__row">
+      <button
+        class="top-bar__brand"
+        title="Back to the full Qatar view"
+        @click="$emit('home')"
+      >
+        <span class="top-bar__logo"><WynLogo :size="42" /></span>
+        <div class="top-bar__brand-text">
+          <div class="top-bar__name">
+            WYN <span v-if="isDemoForced" class="top-bar__demo-badge">DEMO</span>
+          </div>
+          <div class="top-bar__tagline">
+            <span class="top-bar__live-dot" />
+            {{ eventStore.visibleEvents.length }} live · Qatar
+          </div>
         </div>
-        <div class="top-bar__tagline">
-          <span class="top-bar__live-dot" />
-          {{ eventStore.visibleEvents.length }} live · Qatar
-        </div>
-      </div>
-    </button>
+      </button>
 
-    <!-- One chip by default; the row unfolds under it on tap -->
+      <RouterLink
+        v-if="authStore.currentUser"
+        class="top-bar__mail"
+        :to="{ name: 'inbox' }"
+        :title="`Messages${dmStore.unreadTotal ? ` (${dmStore.unreadTotal} new)` : ''}`"
+      >
+        <svg viewBox="0 0 24 24" class="top-bar__mail-icon" aria-hidden="true">
+          <rect x="2.5" y="5" width="19" height="14" rx="3.2" fill="url(#wyn-mail)" />
+          <path
+            d="M4 8.2 12 13l8-4.8"
+            fill="none"
+            stroke="#0b0f19"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            opacity="0.75"
+          />
+          <defs>
+            <linearGradient id="wyn-mail" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#f4e9c9" />
+              <stop offset="1" stop-color="#d4af6a" />
+            </linearGradient>
+          </defs>
+        </svg>
+        <span v-if="dmStore.unreadTotal" :key="dmStore.unreadTotal" class="top-bar__bell-badge">
+          {{ dmStore.unreadTotal }}
+        </span>
+      </RouterLink>
+
+      <RouterLink
+        v-if="authStore.currentUser"
+        class="top-bar__bell"
+        :class="{ 'top-bar__bell--ring': ringing }"
+        :to="{ name: 'inbox', query: { tab: 'alerts' } }"
+        :title="`Notifications${notifStore.unreadCount ? ` (${notifStore.unreadCount} new)` : ''}`"
+      >
+        <svg viewBox="0 0 24 24" class="top-bar__bell-icon" aria-hidden="true">
+          <defs>
+            <linearGradient id="wyn-bell" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#f4e9c9" />
+              <stop offset="1" stop-color="#d4af6a" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M12 2.5a1.4 1.4 0 0 1 1.4 1.4v.5A6.1 6.1 0 0 1 18.1 10.3v3.1l1.6 2.8a1 1 0 0 1-.87 1.5H5.17a1 1 0 0 1-.87-1.5l1.6-2.8v-3.1a6.1 6.1 0 0 1 4.7-5.94v-.46A1.4 1.4 0 0 1 12 2.5Z"
+            fill="url(#wyn-bell)"
+          />
+          <path
+            d="M9.9 19.4a2.2 2.2 0 0 0 4.2 0"
+            fill="none"
+            stroke="url(#wyn-bell)"
+            stroke-width="1.7"
+            stroke-linecap="round"
+          />
+        </svg>
+        <span v-if="notifStore.unreadCount" :key="notifStore.unreadCount" class="top-bar__bell-badge">
+          {{ notifStore.unreadCount }}
+        </span>
+      </RouterLink>
+
+      <RouterLink
+        v-if="authStore.currentUser"
+        class="top-bar__profile chip-surface"
+        :to="{ name: 'profile' }"
+        :title="authStore.currentUser.name"
+      >
+        <MemberAvatar :member="authStore.currentUser" :size="38" />
+      </RouterLink>
+      <button v-else class="top-bar__signin chip-surface" @click="$emit('signin')">
+        Sign in
+      </button>
+    </div>
+
+    <!-- One labelled chip on its own line; the row unfolds beneath it -->
     <div ref="filterWrap" class="top-bar__filter-wrap">
       <button
         class="top-bar__filter chip-surface"
         :class="{ 'top-bar__filter--on': !!activeCat }"
         :style="activeCat ? { borderColor: activeCat.color } : {}"
         :aria-expanded="showCats"
-        :title="activeCat ? `Filtering: ${activeCat.label}` : 'Filter by category'"
         @click="showCats = !showCats"
       >
         <svg v-if="activeCat" viewBox="0 0 24 24" class="top-bar__filter-glyph" aria-hidden="true">
@@ -99,6 +172,7 @@ watch(
             fill="currentColor"
           />
         </svg>
+        <span class="top-bar__filter-text">{{ activeCat ? activeCat.label : 'All events' }}</span>
         <span class="top-bar__filter-caret" :class="{ 'top-bar__filter-caret--up': showCats }">▾</span>
       </button>
 
@@ -123,86 +197,6 @@ watch(
         </nav>
       </Transition>
     </div>
-
-    <RouterLink
-      v-if="authStore.currentUser"
-      class="top-bar__mail"
-      :to="{ name: 'inbox' }"
-      :title="`Messages${dmStore.unreadTotal ? ` (${dmStore.unreadTotal} new)` : ''}`"
-    >
-      <svg viewBox="0 0 24 24" class="top-bar__mail-icon" aria-hidden="true">
-        <rect x="2.5" y="5" width="19" height="14" rx="3.2" fill="url(#wyn-mail)" />
-        <path
-          d="M4 8.2 12 13l8-4.8"
-          fill="none"
-          stroke="#0b0f19"
-          stroke-width="1.7"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          opacity="0.75"
-        />
-        <defs>
-          <linearGradient id="wyn-mail" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#f4e9c9" />
-            <stop offset="1" stop-color="#d4af6a" />
-          </linearGradient>
-        </defs>
-      </svg>
-      <span
-        v-if="dmStore.unreadTotal"
-        :key="dmStore.unreadTotal"
-        class="top-bar__bell-badge"
-      >
-        {{ dmStore.unreadTotal }}
-      </span>
-    </RouterLink>
-
-    <RouterLink
-      v-if="authStore.currentUser"
-      class="top-bar__bell"
-      :class="{ 'top-bar__bell--ring': ringing }"
-      :to="{ name: 'inbox', query: { tab: 'alerts' } }"
-      :title="`Notifications${notifStore.unreadCount ? ` (${notifStore.unreadCount} new)` : ''}`"
-    >
-        <svg viewBox="0 0 24 24" class="top-bar__bell-icon" aria-hidden="true">
-          <defs>
-            <linearGradient id="wyn-bell" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#f4e9c9" />
-              <stop offset="1" stop-color="#d4af6a" />
-            </linearGradient>
-          </defs>
-          <path
-            d="M12 2.5a1.4 1.4 0 0 1 1.4 1.4v.5A6.1 6.1 0 0 1 18.1 10.3v3.1l1.6 2.8a1 1 0 0 1-.87 1.5H5.17a1 1 0 0 1-.87-1.5l1.6-2.8v-3.1a6.1 6.1 0 0 1 4.7-5.94v-.46A1.4 1.4 0 0 1 12 2.5Z"
-            fill="url(#wyn-bell)"
-          />
-          <path
-            d="M9.9 19.4a2.2 2.2 0 0 0 4.2 0"
-            fill="none"
-            stroke="url(#wyn-bell)"
-            stroke-width="1.7"
-            stroke-linecap="round"
-          />
-        </svg>
-        <span
-          v-if="notifStore.unreadCount"
-          :key="notifStore.unreadCount"
-          class="top-bar__bell-badge"
-        >
-          {{ notifStore.unreadCount }}
-        </span>
-    </RouterLink>
-
-    <RouterLink
-      v-if="authStore.currentUser"
-      class="top-bar__profile chip-surface"
-      :to="{ name: 'profile' }"
-      :title="authStore.currentUser.name"
-    >
-      <MemberAvatar :member="authStore.currentUser" :size="38" />
-    </RouterLink>
-    <button v-else class="top-bar__signin chip-surface" @click="$emit('signin')">
-      Sign in
-    </button>
   </header>
 </template>
 
@@ -214,10 +208,21 @@ watch(
   right: 0;
   z-index: 40;
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
+  gap: 10px;
   padding: max(14px, env(safe-area-inset-top)) 14px 0;
   pointer-events: none;
+}
+
+/* Brand and the icon cluster share one line; nothing wraps out of it and
+   under the filter, which is what used to bury the avatar. */
+.top-bar__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  flex-wrap: nowrap;
 }
 
 .top-bar > * {
@@ -328,9 +333,12 @@ watch(
 
 /* The collapsed chip is all that sits in the bar's flow; the row floats
    under it so opening it never reflows the header. */
+/* Its own line, so the chip can say what it does without crowding the
+   icons — and the unfolded row has somewhere to go that overlaps nothing. */
 .top-bar__filter-wrap {
   position: relative;
-  flex: 0 0 auto;
+  align-self: flex-start;
+  max-width: 100%;
   pointer-events: auto;
 }
 
@@ -340,17 +348,23 @@ watch(
   gap: 7px;
   max-width: 100%;
   height: 40px;
-  padding: 0 10px;
+  padding: 0 13px 0 11px;
   border-radius: 999px;
   font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
 }
 
-/* A live filter tints the chip in its category's colour — the glyph and
-   the ring say which, without a label that would crowd the bar out. */
+/* A live filter names itself and tints the chip in its category's colour */
 .top-bar__filter--on {
   border-width: 2px;
+}
+
+.top-bar__filter-text {
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .top-bar__filter-glyph {
@@ -370,14 +384,13 @@ watch(
   transform: rotate(180deg);
 }
 
-/* Anchored to the viewport, not to the (now narrow) chip, so the row can
-   run the full width of the screen and scroll if it needs to. It stays a
-   DOM child of the wrapper so the outside-tap check still sees it. */
+/* Hangs below the chip and runs to the right edge of the screen; it stays
+   a DOM child of the wrapper so the tap-outside check still sees it. */
 .top-bar__filters {
-  position: fixed;
-  top: max(62px, calc(env(safe-area-inset-top) + 48px));
-  left: 14px;
-  right: 14px;
+  position: absolute;
+  top: 48px;
+  left: 0;
+  width: calc(100vw - 28px);
   display: flex;
   gap: 8px;
   overflow-x: auto;
@@ -551,14 +564,5 @@ watch(
 
 
 
-@media (max-width: 720px) {
-  .top-bar {
-    flex-wrap: wrap;
-  }
 
-  .top-bar__filters {
-    order: 3;
-    flex-basis: 100%;
-  }
-}
 </style>
