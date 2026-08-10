@@ -89,12 +89,19 @@ load "seed-endings.sql (again — must be re-runnable)" "$DOCS/seed-endings.sql"
 
 [ "$fail" = 0 ] || { echo; echo "SQL did not load — gates not run."; exit 1; }
 
-out="$($PSQL -d wyn -q -t -A -f "$HERE/gates.sql" 2>&1 |
-       grep -Ev '^NOTICE|^WARNING|^HINT|^$|^DROP|^CREATE|^UPDATE|^INSERT')"
+# Strips psql's own chatter, and the "psql:file:line: NOTICE:" prefix that
+# raise notice arrives wrapped in, so a PASS line reads the same either way.
+run_suite() {
+  $PSQL -d wyn -q -t -A -f "$1" 2>&1 |
+    sed 's/^psql:[^ ]* NOTICE: *//' |
+    grep -Ev '^psql:.*(WARNING|HINT)|^NOTICE|^$|^DROP|^CREATE|^UPDATE|^INSERT|^DO$'
+}
+
+out="$(run_suite "$HERE/gates.sql"; run_suite "$HERE/gender.sql")"
 echo "$out"
 echo
-if echo "$out" | grep -q "FAIL"; then
-  echo "$(echo "$out" | grep -c FAIL) failing check(s)."
+if echo "$out" | grep -qE "FAIL|ERROR"; then
+  echo "$(echo "$out" | grep -cE 'FAIL|ERROR') failing check(s)."
   exit 1
 fi
 echo "All checks passed."

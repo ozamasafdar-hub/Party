@@ -51,7 +51,7 @@ function readAccounts() {
   }
 }
 
-function makeDemoUser(name) {
+function makeDemoUser(name, gender = null) {
   const initials = name
     .split(/\s+/)
     .map((part) => part[0].toUpperCase())
@@ -62,7 +62,7 @@ function makeDemoUser(name) {
     name,
     initials,
     avatarColor: AVATAR_COLORS[name.length % AVATAR_COLORS.length],
-    gender: null,
+    gender,
     reliability: 100,
     attended: 0,
     flaked: 0,
@@ -71,9 +71,14 @@ function makeDemoUser(name) {
   }
 }
 
-function validate({ name, email, password }, { requireName }) {
+function validate({ name, email, password, gender }, { requireName, requireGender }) {
   if (requireName && (!name || name.trim().length < 2)) {
     throw new Error('Please enter your name.')
+  }
+  // Asked at the door because ladies-only events are gated on it, and it
+  // cannot be changed afterwards — see migration 013
+  if (requireGender && !['female', 'male'].includes(gender)) {
+    throw new Error('Please choose whether you are a woman or a man.')
   }
   if (!/.+@.+\..+/.test((email || '').trim())) {
     throw new Error('Enter a valid email address.')
@@ -171,8 +176,8 @@ export const useAuthStore = defineStore('auth', {
      * Live mode may return { needsEmailConfirmation: true } when the
      * Supabase project requires confirming the address first.
      */
-    async signUp({ name, email, password }) {
-      validate({ name, email, password }, { requireName: true })
+    async signUp({ name, email, password, gender }) {
+      validate({ name, email, password, gender }, { requireName: true, requireGender: true })
       const trimmedName = name.trim()
       const em = email.trim().toLowerCase()
 
@@ -180,7 +185,8 @@ export const useAuthStore = defineStore('auth', {
         const { data, error } = await supabase.auth.signUp({
           email: em,
           password,
-          options: { data: { full_name: trimmedName } }
+          // handle_new_user() copies both into the profile row (migration 013)
+          options: { data: { full_name: trimmedName, gender } }
         })
         if (error) {
           throw new Error(
@@ -198,7 +204,7 @@ export const useAuthStore = defineStore('auth', {
       if (accounts[em]) {
         throw new Error('An account with this email already exists — log in instead.')
       }
-      const user = makeDemoUser(trimmedName)
+      const user = makeDemoUser(trimmedName, gender)
       accounts[em] = { password, user }
       storage.set(ACCOUNTS_KEY, JSON.stringify(accounts))
       this.currentUser = user
@@ -216,7 +222,18 @@ export const useAuthStore = defineStore('auth', {
       const trimmed = (name || '').trim()
       if (trimmed.length < 2) throw new Error('Please enter your name.')
       const cleanBio = (bio || '').trim().slice(0, 160)
-      const cleanGender = ['female', 'male'].includes(gender) ? gender : null
+      /**
+       * Gender is set once (migration 013). Once it holds a value the
+       * client stops sending it at all: the database would refuse a changed
+       * value, and because that refusal aborts the whole statement it would
+       * take an innocent name or bio edit down with it.
+       */
+      const genderLocked = !!this.currentUser.gender
+      const cleanGender = genderLocked
+        ? this.currentUser.gender
+        : ['female', 'male'].includes(gender)
+          ? gender
+          : null
 
       if (isLive) {
         let avatar_url
@@ -238,11 +255,17 @@ export const useAuthStore = defineStore('auth', {
           .update({
             full_name: trimmed,
             bio: cleanBio || null,
-            gender: cleanGender,
+            ...(genderLocked ? {} : { gender: cleanGender }),
             ...(avatar_url ? { avatar_url } : {})
           })
           .eq('id', this.currentUser.id)
-        if (error) throw new Error(error.message)
+        if (error) {
+          throw new Error(
+            /GENDER_LOCKED/.test(error.message)
+              ? 'Your gender was set when you joined and cannot be changed here. Contact support if it is wrong.'
+              : error.message
+          )
+        }
         await this._loadProfile(this.currentUser.id)
         return this.currentUser
       }
@@ -260,6 +283,41 @@ export const useAuthStore = defineStore('auth', {
         gender: cleanGender,
         avatarUrl: avatarDataUrl ?? this.currentUser.avatarUrl ?? null
       }
+      this.currentUser = user
+      storage.set(SESSION_KEY, JSON.stringify(user))
+      upsertDemoMember(user)
+      const accounts = readAccounts()
+      for (const email of Object.keys(accounts)) {
+        if (accounts[email].user?.id === user.id) accounts[email].user = user
+      }
+      storage.set(ACCOUNTS_KEY, JSON.stringify(accounts))
+      return user
+    },
+
+    /**
+     * The one-time answer, for members who joined before sign-up asked.
+     * Separate from updateProfile so the prompt does not have to resend a
+     * name, bio and avatar it never showed the member.
+     */
+    async setGenderOnce(gender) {
+      if (!['female', 'male'].includes(gender)) {
+        throw new Error('Please choose whether you are a woman or a man.')
+      }
+      if (this.currentUser?.gender) {
+        throw new Error('Your gender was set when you joined and cannot be changed here.')
+      }
+
+      if (isLive) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ gender })
+          .eq('id', this.currentUser.id)
+        if (error) throw new Error(error.message)
+        await this._loadProfile(this.currentUser.id)
+        return this.currentUser
+      }
+
+      const user = { ...this.currentUser, gender }
       this.currentUser = user
       storage.set(SESSION_KEY, JSON.stringify(user))
       upsertDemoMember(user)

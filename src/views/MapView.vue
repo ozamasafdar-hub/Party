@@ -21,6 +21,7 @@ import MapSearchPanel from '@/components/map/MapSearchPanel.vue'
 import TimePills from '@/components/map/TimePills.vue'
 import HostProModal from '@/components/pro/HostProModal.vue'
 import StoryViewer from '@/components/memories/StoryViewer.vue'
+import GenderPrompt from '@/components/profile/GenderPrompt.vue'
 import MemoryUploadSheet from '@/components/memories/MemoryUploadSheet.vue'
 import { useHostPermissions } from '@/composables/useHostPermissions'
 import { inMemoryWindow } from '@/utils/datetime'
@@ -208,6 +209,35 @@ function dismissRecap(id) {
   dismissedRecaps.value = new Set([...dismissedRecaps.value, id])
   try {
     sessionStorage.setItem('wyn:recap-dismissed', JSON.stringify([...dismissedRecaps.value]))
+  } catch {
+    /* session-only convenience */
+  }
+}
+
+/**
+ * Members who joined before sign-up asked hold gender null, so women-only
+ * events are hidden from them whether they are women or not. Ask once.
+ * "Not now" is honoured for this session and the question returns on the
+ * next one — the same treatment the recap prompt gets.
+ */
+const genderAsked = ref(
+  (() => {
+    try {
+      return sessionStorage.getItem('wyn:gender-asked') === '1'
+    } catch {
+      return false
+    }
+  })()
+)
+
+const needsGender = computed(
+  () => authStore.isAuthenticated && !authStore.currentUser?.gender && !genderAsked.value
+)
+
+function dismissGenderPrompt() {
+  genderAsked.value = true
+  try {
+    sessionStorage.setItem('wyn:gender-asked', '1')
   } catch {
     /* session-only convenience */
   }
@@ -590,6 +620,13 @@ function onSearchPlace(place) {
       @close="storyEvent = null"
       @add="uploadEvent = storyEvent"
       @login-required="openLogin('Sign in to react and follow hosts.')"
+    />
+
+    <!-- One-time question for members who joined before sign-up asked -->
+    <GenderPrompt
+      v-if="needsGender && !showLogin && !showCreateModal && !storyEvent"
+      @close="dismissGenderPrompt"
+      @answered="dismissGenderPrompt"
     />
 
     <!-- Recap upload sheet -->

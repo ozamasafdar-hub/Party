@@ -17,6 +17,10 @@ const form = reactive({
   bio: authStore.currentUser.bio || '',
   gender: authStore.currentUser.gender || ''
 })
+// Set once at sign-up (migration 013). Members who joined before it exists
+// still hold null and get exactly one pass at answering.
+const genderLocked = !!authStore.currentUser.gender
+
 const avatarPreview = ref(authStore.currentUser.avatarUrl || null)
 const newAvatar = ref(null)
 const fileInput = ref(null)
@@ -95,14 +99,32 @@ async function save() {
         placeholder="A line about you — favorite plans, neighborhoods, sports…"
       />
 
-      <label class="field-label" for="ep-gender">
-        Gender <span class="edit-profile__optional">(optional — unlocks ladies-only events)</span>
-      </label>
-      <select id="ep-gender" v-model="form.gender" class="field-input">
-        <option value="">Prefer not to say</option>
-        <option value="female">Female</option>
-        <option value="male">Male</option>
-      </select>
+      <!-- Set once, at sign-up. Members who joined before that still hold
+           null, so they get one editable pass and it freezes on save. -->
+      <template v-if="genderLocked">
+        <span class="field-label">Gender</span>
+        <p class="edit-profile__locked">
+          {{ form.gender === 'female' ? 'Woman' : 'Man' }}
+          <span class="edit-profile__locked-note">
+            — set when you joined. Contact support if this is wrong.
+          </span>
+        </p>
+      </template>
+      <template v-else>
+        <label class="field-label" for="ep-gender">
+          Gender
+          <span class="edit-profile__optional">(unlocks women-only events)</span>
+        </label>
+        <select id="ep-gender" v-model="form.gender" class="field-input">
+          <option value="">Prefer not to say</option>
+          <option value="female">Woman</option>
+          <option value="male">Man</option>
+        </select>
+        <p class="edit-profile__once">
+          Once you save this it can't be changed — it's what keeps women-only
+          events private.
+        </p>
+      </template>
 
       <p v-if="error" class="edit-profile__error">{{ error }}</p>
 
@@ -177,6 +199,33 @@ async function save() {
 .edit-profile__bio {
   resize: vertical;
   min-height: 56px;
+}
+
+.edit-profile__locked {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.edit-profile__locked-note {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.edit-profile__once {
+  margin: 6px 0 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
 }
 
 .edit-profile__optional {

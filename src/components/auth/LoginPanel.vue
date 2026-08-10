@@ -16,8 +16,13 @@ const emit = defineEmits(['success'])
 
 const authStore = useAuthStore()
 
+const GENDERS = [
+  { value: 'female', label: 'Woman' },
+  { value: 'male', label: 'Man' }
+]
+
 const mode = ref('signin') // 'signin' | 'signup'
-const form = reactive({ name: '', email: '', password: '' })
+const form = reactive({ name: '', email: '', password: '', gender: '' })
 const error = ref('')
 const notice = ref('')
 const busy = ref(false)
@@ -79,6 +84,31 @@ async function submit() {
         />
       </template>
 
+      <!-- Ladies-only events are gated on this, so it is asked at the door
+           rather than left to a profile edit nobody makes. Said plainly
+           here because it cannot be changed afterwards. -->
+      <template v-if="mode === 'signup'">
+        <span class="field-label">You are</span>
+        <div class="login-panel__gender" role="radiogroup" aria-label="You are">
+          <button
+            v-for="option in GENDERS"
+            :key="option.value"
+            type="button"
+            class="login-panel__gender-btn"
+            :class="{ 'login-panel__gender-btn--on': form.gender === option.value }"
+            role="radio"
+            :aria-checked="form.gender === option.value"
+            @click="form.gender = option.value"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+        <p class="login-panel__gender-note">
+          Sets which events you can see — women-only events stay private to
+          women. You can't change this later.
+        </p>
+      </template>
+
       <label class="field-label" for="auth-email">Email</label>
       <input
         id="auth-email"
@@ -118,7 +148,11 @@ async function submit() {
       <p v-if="error" class="login-panel__error">{{ error }}</p>
       <p v-if="notice" class="login-panel__notice">{{ notice }}</p>
 
-      <button type="submit" class="btn-primary login-panel__submit" :disabled="busy">
+      <button
+        type="submit"
+        class="btn-primary login-panel__submit"
+        :disabled="busy || (mode === 'signup' && !form.gender)"
+      >
         {{ busy ? 'One moment…' : mode === 'signup' ? 'Create account' : 'Log in' }}
       </button>
     </form>
@@ -189,6 +223,45 @@ async function submit() {
 
 .login-panel__eye:hover {
   color: var(--text-primary);
+}
+
+.login-panel__gender {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.login-panel__gender-btn {
+  padding: 13px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-size: 14.5px;
+  font-weight: 600;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+/* :hover would outscore this one-class selector and wash out the choice
+   on a phone, where a tap leaves the hover stuck — see TimePills */
+@media (hover: hover) {
+  .login-panel__gender-btn:not(.login-panel__gender-btn--on):hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.login-panel__gender-btn--on {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
+.login-panel__gender-note {
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
 }
 
 .login-panel__error {

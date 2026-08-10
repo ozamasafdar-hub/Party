@@ -1395,3 +1395,88 @@ begin
   return new;
 end;
 $$;
+
+-- ----------------------------------------------------------------------------
+-- Migration 013 — gender is asked at sign-up and then frozen. null may be
+-- filled in; a filled-in value may not change. Admins, and requests with no
+-- user identity, are the deliberate exceptions.
+-- ----------------------------------------------------------------------------
+create or replace function public.freeze_gender()
+returns trigger
+language plpgsql
+security definer
+as $$
+begin
+  if old.gender is not null and new.gender is distinct from old.gender then
+    if auth.uid() is not null and not exists (
+      select 1 from public.profiles where id = auth.uid() and is_admin
+    ) then
+      raise exception
+        'GENDER_LOCKED: gender is set once when you join and cannot be changed here';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_freeze_gender on public.profiles;
+create trigger profiles_freeze_gender
+  before update on public.profiles
+  for each row execute function public.freeze_gender();
+
+-- ----------------------------------------------------------------------------
+-- 2. The way back
+--
+-- "Nobody can change it" needs exactly one exception, or a mistyped choice
+-- at sign-up means an account that can never be right. Admins only, and it
+-- sets the value directly rather than lifting the freeze.
+-- ----------------------------------------------------------------------------
+create or replace function public.set_member_gender(p_member uuid, p_gender text)
+returns void
+language plpgsql
+security definer
+as $$
+begin
+  if not exists (
+    select 1 from public.profiles where id = auth.uid() and is_admin
+  ) then
+    raise exception 'NOT_ADMIN: only an admin can change a member''s gender';
+  end if;
+
+  if p_gender is not null and p_gender not in ('female', 'male') then
+    raise exception 'INVALID_GENDER: expected female or male';
+  end if;
+
+  -- freeze_gender() lets an admin through, so this is a plain update. The
+  -- function earns its place by validating the value and checking the
+  -- caller in one named place rather than leaving both to the client.
+  update public.profiles set gender = p_gender where id = p_member;
+end;
+$$;
+
+revoke all on function public.set_member_gender(uuid, text) from public;
+grant execute on function public.set_member_gender(uuid, text) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- 3. Carry the answer in from sign-up
+--
+-- The client puts gender in the sign-up metadata; without this it would sit
+-- in auth.users and never reach the profile the app actually reads.
+-- ----------------------------------------------------------------------------
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+as $$
+begin
+  insert into public.profiles (id, full_name, gender)
+  values (
+    new.id,
+    coalesce(nullif(trim(new.raw_user_meta_data ->> 'full_name'), ''),
+             split_part(new.email, '@', 1)),
+    nullif(new.raw_user_meta_data ->> 'gender', '')
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
