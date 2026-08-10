@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { CATEGORIES } from '@/config/categories'
 import { useEventStore } from '@/stores/eventStore'
@@ -17,10 +17,34 @@ const dmStore = useDmStore()
 
 const emit = defineEmits(['signin', 'home', 'filter-changed'])
 
+/**
+ * The eight category chips used to sit permanently across the top, hiding
+ * a strip of the map. They now live behind one chip that names the current
+ * filter, and the row unfolds beneath it.
+ *
+ * Picking a category deliberately leaves the row open, so switching
+ * between them is one tap each rather than reopening every time.
+ */
+const showCats = ref(false)
+const filterWrap = ref(null)
+
+const activeCat = computed(() =>
+  eventStore.activeCategory ? CATEGORIES[eventStore.activeCategory] : null
+)
+
 function pickCategory(key, label) {
   eventStore.setCategory(key)
   emit('filter-changed', eventStore.activeCategory ? label : 'All')
 }
+
+/** Anything tapped outside the filter — including the map — folds it away. */
+function onDocumentPointerDown(event) {
+  if (!showCats.value) return
+  if (!filterWrap.value?.contains(event.target)) showCats.value = false
+}
+
+onMounted(() => window.addEventListener('pointerdown', onDocumentPointerDown))
+onBeforeUnmount(() => window.removeEventListener('pointerdown', onDocumentPointerDown))
 
 const ringing = ref(false)
 
@@ -56,24 +80,49 @@ watch(
       </div>
     </button>
 
-    <nav class="top-bar__filters" aria-label="Filter by category">
+    <!-- One chip by default; the row unfolds under it on tap -->
+    <div ref="filterWrap" class="top-bar__filter-wrap">
       <button
-        v-for="(cat, key) in CATEGORIES"
-        :key="key"
-        class="top-bar__cat"
-        :class="{ 'top-bar__cat--active': eventStore.activeCategory === key }"
-        :style="eventStore.activeCategory === key ? { background: cat.color, borderColor: cat.color } : {}"
-        :title="cat.label"
-        @click="pickCategory(key, cat.label)"
+        class="top-bar__filter chip-surface"
+        :class="{ 'top-bar__filter--on': !!activeCat }"
+        :style="activeCat ? { borderColor: activeCat.color } : {}"
+        :aria-expanded="showCats"
+        :title="activeCat ? `Filtering: ${activeCat.label}` : 'Filter by category'"
+        @click="showCats = !showCats"
       >
-        <svg viewBox="0 0 24 24" class="top-bar__cat-glyph" aria-hidden="true">
-          <path :d="cat.glyph" :fill="eventStore.activeCategory === key ? '#0b0f19' : cat.color" />
+        <svg v-if="activeCat" viewBox="0 0 24 24" class="top-bar__filter-glyph" aria-hidden="true">
+          <path :d="activeCat.glyph" :fill="activeCat.color" />
         </svg>
-        <span v-if="eventStore.activeCategory === key" class="top-bar__cat-label">
-          {{ cat.label }}
-        </span>
+        <svg v-else viewBox="0 0 24 24" class="top-bar__filter-glyph" aria-hidden="true">
+          <path
+            d="M4 5h16a1 1 0 0 1 .78 1.63L14.5 14v5.4a1 1 0 0 1-1.45.9l-3-1.5a1 1 0 0 1-.55-.9V14L3.22 6.63A1 1 0 0 1 4 5Z"
+            fill="currentColor"
+          />
+        </svg>
+        <span class="top-bar__filter-caret" :class="{ 'top-bar__filter-caret--up': showCats }">▾</span>
       </button>
-    </nav>
+
+      <Transition name="fade">
+        <nav v-if="showCats" class="top-bar__filters" aria-label="Filter by category">
+          <button
+            v-for="(cat, key) in CATEGORIES"
+            :key="key"
+            class="top-bar__cat"
+            :class="{ 'top-bar__cat--active': eventStore.activeCategory === key }"
+            :style="eventStore.activeCategory === key ? { background: cat.color, borderColor: cat.color } : {}"
+            :title="cat.label"
+            @click="pickCategory(key, cat.label)"
+          >
+            <svg viewBox="0 0 24 24" class="top-bar__cat-glyph" aria-hidden="true">
+              <path :d="cat.glyph" :fill="eventStore.activeCategory === key ? '#0b0f19' : cat.color" />
+            </svg>
+            <span v-if="eventStore.activeCategory === key" class="top-bar__cat-label">
+              {{ cat.label }}
+            </span>
+          </button>
+        </nav>
+      </Transition>
+    </div>
 
     <RouterLink
       v-if="authStore.currentUser"
@@ -277,13 +326,67 @@ watch(
   vertical-align: middle;
 }
 
+/* The collapsed chip is all that sits in the bar's flow; the row floats
+   under it so opening it never reflows the header. */
+.top-bar__filter-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  pointer-events: auto;
+}
+
+.top-bar__filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* A live filter tints the chip in its category's colour — the glyph and
+   the ring say which, without a label that would crowd the bar out. */
+.top-bar__filter--on {
+  border-width: 2px;
+}
+
+.top-bar__filter-glyph {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+
+.top-bar__filter-caret {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-secondary);
+  transition: transform 0.18s ease;
+}
+
+.top-bar__filter-caret--up {
+  transform: rotate(180deg);
+}
+
+/* Anchored to the viewport, not to the (now narrow) chip, so the row can
+   run the full width of the screen and scroll if it needs to. It stays a
+   DOM child of the wrapper so the outside-tap check still sees it. */
 .top-bar__filters {
+  position: fixed;
+  top: max(62px, calc(env(safe-area-inset-top) + 48px));
+  left: 14px;
+  right: 14px;
   display: flex;
   gap: 8px;
   overflow-x: auto;
   scrollbar-width: none;
-  padding-bottom: 6px;
-  flex: 1;
+  padding: 2px 2px 8px;
+}
+
+.top-bar__filters::-webkit-scrollbar {
+  display: none;
 }
 
 .top-bar__filters::-webkit-scrollbar {
