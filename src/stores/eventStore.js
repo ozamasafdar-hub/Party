@@ -341,7 +341,9 @@ export const useEventStore = defineStore('events', {
     },
 
     async fetchExactLocation(eventId) {
-      return getExactLocation(eventId)
+      // The viewer is passed through so demo mode can check entitlement the
+      // way live mode's RLS policy on event_locations does
+      return getExactLocation(eventId, useAuthStore().currentUser?.id || null)
     },
 
     _patch(event) {

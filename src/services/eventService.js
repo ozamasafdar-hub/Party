@@ -135,6 +135,21 @@ function demoGateProOnly(event, userId) {
   }
 }
 
+/**
+ * Ladies-only and "already over" are enforced here, not only by hiding the
+ * event: a shared link, a tab left open since before the host flipped the
+ * toggle, or a poked console all reach this function with the UI bypassed.
+ * Live mode enforces the same two rules in the capacity trigger.
+ */
+function demoGateJoinable(event, userId) {
+  if (event.hostId === userId) return
+  if (event.ladiesOnly && db.members.find((m) => m.id === userId)?.gender !== 'female') {
+    throw friendly(new Error('LADIES_ONLY'))
+  }
+  const end = new Date(event.startsAt).getTime() + event.durationMinutes * 60000
+  if (Date.now() > end) throw friendly(new Error('EVENT_ENDED'))
+}
+
 const listeners = new Set()
 const messageListeners = new Set()
 const dmListeners = new Set()
@@ -323,6 +338,7 @@ const demo = {
     if (event.attendeeIds.includes(userId)) return clone(event)
     demoGateReliability(event, userId)
     demoGateProOnly(event, userId)
+    demoGateJoinable(event, userId)
     if (event.attendeeIds.length >= event.maxCapacity) {
       throw new Error('This event is already full')
     }
@@ -343,6 +359,7 @@ const demo = {
     }
     demoGateReliability(event, userId)
     demoGateProOnly(event, userId)
+    demoGateJoinable(event, userId)
     event.requestedIds.push(userId)
     emit({ type: 'UPDATE', event: clone(event) })
     return clone(event)
@@ -378,6 +395,7 @@ const demo = {
     }
     demoGateReliability(event, userId)
     demoGateProOnly(event, userId)
+    demoGateJoinable(event, userId)
     event.waitlistIds.push(userId)
     emit({ type: 'UPDATE', event: clone(event) })
     return clone(event)
@@ -422,8 +440,11 @@ const demo = {
     return clone(event)
   },
 
-  async getExactLocation(eventId) {
+  async getExactLocation(eventId, userId) {
     const event = demoFind(eventId)
+    // The whole point of blurring is that the address is earned. Live mode
+    // enforces this with RLS on event_locations; demo has to say no itself.
+    if (event.hostId !== userId && !event.attendeeIds.includes(userId)) return null
     return event.exactLat != null
       ? { lat: event.exactLat, lng: event.exactLng }
       : { lat: event.lat, lng: event.lng }
@@ -785,6 +806,12 @@ function friendly(error) {
   }
   if (/PRO_ONLY/.test(error.message)) {
     return new Error('This event is open to Host Pro members only')
+  }
+  if (/LADIES_ONLY/.test(error.message)) {
+    return new Error('This event is for women only')
+  }
+  if (/EVENT_ENDED/.test(error.message)) {
+    return new Error('This event has already ended')
   }
   if (/DM_BLOCKED/.test(error.message)) {
     return new Error(DM_BLOCKED_MESSAGE)

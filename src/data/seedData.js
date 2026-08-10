@@ -86,6 +86,18 @@ export const SEED_MEMORIES = [
     caption: 'Skyline views forever',
     reactions: { '👏': 9 },
     at: new Date(Date.now() - 45 * 60000).toISOString()
+  },
+  {
+    // Posted on an event that ended two days ago — proves the 24h window is
+    // what hides the recap, not the lack of anything to show
+    id: 'mem-old',
+    eventId: 'e-oldpicnic',
+    userId: 'u-mariam',
+    mediaUrl: 'https://picsum.photos/seed/wynpicnic2/720/1080',
+    mediaType: 'image',
+    caption: 'Worth the 5am alarm',
+    reactions: { '🔥': 3 },
+    at: new Date(Date.now() - 48 * 3600000).toISOString()
   }
 ]
 
@@ -291,5 +303,39 @@ export const SEED_EVENTS = [
       'https://picsum.photos/seed/wynmajlis/800/450',
       'https://picsum.photos/seed/wyncards/800/450'
     ]
+  },
+  {
+    // Ended, but nobody posted to the recap — the card must offer nothing
+    id: 'e-quiz',
+    hostId: 'u-layla',
+    title: 'Pub quiz at the Torch',
+    description: 'Six rounds, one team, zero chance. Free to join, bring your general knowledge.',
+    category: 'other',
+    locationName: 'The Torch, Aspire',
+    lat: 25.2606,
+    lng: 51.4447,
+    startsAt: at(-4),
+    durationMinutes: 120,
+    maxCapacity: 8,
+    attendeeIds: ['u-layla', 'u-mariam', 'u-yousef'],
+    coverUrl: null,
+    photoUrls: []
+  },
+  {
+    // Ended two days ago: its recap has lapsed, so no memory pin, no chip
+    id: 'e-oldpicnic',
+    hostId: 'u-mariam',
+    title: 'Sunrise picnic — Al Bidda',
+    description: 'Early start, flasks of karak, and the skyline waking up across the bay.',
+    category: 'other',
+    locationName: 'Al Bidda Park',
+    lat: 25.2985,
+    lng: 51.5233,
+    startsAt: at(-50),
+    durationMinutes: 120,
+    maxCapacity: 10,
+    attendeeIds: ['u-mariam', 'u-noora'],
+    coverUrl: 'https://picsum.photos/seed/wynpicnic/800/450',
+    photoUrls: ['https://picsum.photos/seed/wynpicnic/800/450']
   }
 ]
