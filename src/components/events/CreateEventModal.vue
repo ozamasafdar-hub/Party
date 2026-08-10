@@ -1169,8 +1169,12 @@ async function submit() {
   font-variant-numeric: tabular-nums;
 }
 
-.create-modal__cap-option:hover {
-  background: rgba(255, 255, 255, 0.12);
+/* Pointer devices only, and never over the chosen capacity — :hover
+   outscores the --active modifier and would hide the selection. */
+@media (hover: hover) {
+  .create-modal__cap-option:not(.create-modal__cap-option--active):hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
 }
 
 .create-modal__cap-option--active {

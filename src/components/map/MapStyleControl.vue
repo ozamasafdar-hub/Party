@@ -89,8 +89,12 @@ const emit = defineEmits(['update:style', 'update:heat', 'close'])
   transition: background 0.15s ease;
 }
 
-.style-panel__row:hover {
-  background: rgba(255, 255, 255, 0.06);
+/* Pointer devices only, and never over the selected row — :hover outscores
+   the --active modifier and would wash out which style you picked. */
+@media (hover: hover) {
+  .style-panel__row:not(.style-panel__row--active):hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
 }
 
 .style-panel__row--active {

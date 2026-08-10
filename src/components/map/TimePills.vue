@@ -90,8 +90,20 @@ function pickMode(mode, label) {
   transition: all 0.15s ease;
 }
 
-.time-pills__pill:hover {
-  background: rgba(255, 255, 255, 0.12);
+/**
+ * Two things make a naked :hover wrong here.
+ *
+ * A tap on a touch screen leaves the hover stuck on the pill you just
+ * pressed, so `hover: hover` keeps this to devices with a real pointer.
+ * And `:hover` outscores a `--active` modifier — one class plus a
+ * pseudo-class against one class — so without the :not() it paints a
+ * translucent white over whichever pill is selected, whatever the order
+ * the rules are written in. Over a light basemap that is invisible.
+ */
+@media (hover: hover) {
+  .time-pills__pill:not(.time-pills__pill--active):not(.time-pills__pill--memory-active):hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
 }
 
 .time-pills__pill--active {
