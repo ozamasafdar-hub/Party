@@ -84,10 +84,9 @@ function pickMode(mode, label) {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
-  background: rgba(13, 18, 30, 0.82);
-  border: 1px solid var(--border-subtle);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  background: rgba(15, 20, 32, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   transition: all 0.15s ease;
 }
 
@@ -98,7 +97,7 @@ function pickMode(mode, label) {
 .time-pills__pill--active {
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);
   border-color: rgba(255, 255, 255, 0.25);
-  box-shadow: 0 4px 18px rgba(139, 21, 56, 0.5);
+  box-shadow: 0 2px 10px rgba(139, 21, 56, 0.45);
 }
 
 .time-pills__pill--memory {

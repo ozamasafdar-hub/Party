@@ -145,13 +145,13 @@ watch(
 
     <RouterLink
       v-if="authStore.currentUser"
-      class="top-bar__profile glass-panel"
+      class="top-bar__profile chip-surface"
       :to="{ name: 'profile' }"
       :title="authStore.currentUser.name"
     >
       <MemberAvatar :member="authStore.currentUser" :size="38" />
     </RouterLink>
-    <button v-else class="top-bar__signin glass-panel" @click="$emit('signin')">
+    <button v-else class="top-bar__signin chip-surface" @click="$emit('signin')">
       Sign in
     </button>
   </header>
@@ -228,8 +228,7 @@ watch(
   gap: 6px;
   padding: 3px 10px 3px 8px;
   border-radius: 999px;
-  background: rgba(11, 15, 25, 0.72);
-  backdrop-filter: blur(6px);
+  background: rgba(11, 15, 25, 0.86);
   border: 1px solid rgba(255, 255, 255, 0.12);
   font-size: 10.5px;
   font-weight: 700;
@@ -301,9 +300,9 @@ watch(
   min-width: 40px;
   padding: 0 9px;
   border-radius: 999px;
-  background: rgba(13, 18, 30, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(8px);
+  background: rgba(15, 20, 32, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   flex-shrink: 0;
   transition: all 0.18s ease;
 }
@@ -364,9 +363,9 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(13, 18, 30, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(8px);
+  background: rgba(15, 20, 32, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   transition: all 0.18s ease;
 }
 

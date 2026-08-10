@@ -74,6 +74,28 @@ a {
   box-shadow: var(--shadow-card);
 }
 
+/**
+ * Small round chrome floating over the map — category chips, the map
+ * controls, the time pills, the bell and envelope.
+ *
+ * Deliberately no backdrop-filter. iOS composites the blurred backdrop to
+ * the element's *rectangle* and masks only the background to the rounded
+ * shape, so every circle sat inside a pale square. These are small enough
+ * that a near-opaque fill reads better than a blur anyway, and it saves a
+ * compositing layer per chip on phones — there are a dozen of them.
+ */
+.chip-surface {
+  background: rgba(15, 20, 32, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.chip-surface:hover {
+  background: rgba(24, 31, 46, 0.96);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
 .btn-primary {
   display: inline-flex;
   align-items: center;

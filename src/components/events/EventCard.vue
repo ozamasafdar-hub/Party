@@ -846,10 +846,10 @@ onBeforeUnmount(() => chatStore.close())
   height: 32px;
   border-radius: 50%;
   /* Sits over the cover photo as well as plain panel, so it carries its
-     own backdrop rather than borrowing the card's */
-  background: rgba(11, 15, 25, 0.72);
-  backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+     own opaque backdrop rather than borrowing the card's */
+  background: rgba(11, 15, 25, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   color: var(--text-primary);
   font-size: 13px;
   z-index: 4;

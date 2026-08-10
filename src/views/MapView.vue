@@ -437,16 +437,16 @@ function onSearchPlace(place) {
     <!-- Floating map controls -->
     <div class="map-view__controls">
       <button
-        class="map-view__ctrl glass-panel"
+        class="map-view__ctrl chip-surface"
         :class="{ 'map-view__ctrl--active': showSearch }"
         title="Search"
         @click="toggleSearch"
       >
         🔍
       </button>
-      <button class="map-view__ctrl glass-panel" title="My location" @click="liveMap?.locateMe()">📍</button>
+      <button class="map-view__ctrl chip-surface" title="My location" @click="liveMap?.locateMe()">📍</button>
       <button
-        class="map-view__ctrl glass-panel"
+        class="map-view__ctrl chip-surface"
         :class="{ 'map-view__ctrl--active': showList }"
         title="What's on"
         @click="toggleList"
@@ -454,7 +454,7 @@ function onSearchPlace(place) {
         📋
       </button>
       <button
-        class="map-view__ctrl glass-panel"
+        class="map-view__ctrl chip-surface"
         :class="{ 'map-view__ctrl--active': showStylePanel }"
         title="Map style"
         @click="showStylePanel = !showStylePanel"
