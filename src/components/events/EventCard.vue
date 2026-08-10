@@ -586,10 +586,18 @@ onBeforeUnmount(() => chatStore.close())
             No messages yet — say salam! 👋
           </p>
           <div v-for="message in chatStore.messages" :key="message.id" class="event-card__msg">
-            <MemberAvatar :member="resolveMember(message.userId)" :size="26" />
+            <RouterLink
+              :to="{ name: 'profile', params: { id: message.userId } }"
+              :title="`View ${resolveMember(message.userId).name}'s profile`"
+            >
+              <MemberAvatar :member="resolveMember(message.userId)" :size="26" />
+            </RouterLink>
             <div class="event-card__msg-body">
               <span class="event-card__msg-head">
-                <strong>{{ resolveMember(message.userId).name }}</strong>
+                <RouterLink
+                  class="event-card__msg-author"
+                  :to="{ name: 'profile', params: { id: message.userId } }"
+                >{{ resolveMember(message.userId).name }}</RouterLink>
                 <span class="event-card__msg-time">{{ formatTime(message.at) }}</span>
               </span>
               <span class="event-card__msg-text">{{ message.text }}</span>
@@ -1236,6 +1244,16 @@ onBeforeUnmount(() => chatStore.close())
 
 .event-card__msg-head strong {
   font-weight: 700;
+}
+
+.event-card__msg-author {
+  font-weight: 700;
+  color: inherit;
+  text-decoration: none;
+}
+.event-card__msg-author:hover,
+.event-card__msg-author:active {
+  text-decoration: underline;
 }
 
 .event-card__msg-time {

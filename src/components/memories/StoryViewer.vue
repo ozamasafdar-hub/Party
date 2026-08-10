@@ -11,6 +11,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useFollowStore } from '@/stores/followStore'
 import { useNotifStore } from '@/stores/notifStore'
 import { memoryHoursLeft, formatTime } from '@/utils/datetime'
+import { RouterLink } from 'vue-router'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
 
 const props = defineProps({
@@ -215,11 +216,21 @@ async function notifyMe() {
 
     <!-- top bar -->
     <header class="story__head" @pointerdown.stop @pointerup.stop>
-      <MemberAvatar :member="host" :size="34" />
+      <RouterLink
+        class="story__head-avatar"
+        :to="{ name: 'profile', params: { id: event.hostId } }"
+        :title="`View ${host.name}'s profile`"
+      >
+        <MemberAvatar :member="host" :size="34" />
+      </RouterLink>
       <div class="story__head-text">
         <div class="story__title">{{ event.title }}</div>
         <div class="story__sub">
-          Hosted by {{ host.name }}
+          Hosted by
+          <RouterLink
+            class="story__host-link"
+            :to="{ name: 'profile', params: { id: event.hostId } }"
+          >{{ host.name }}</RouterLink>
           <template v-if="current"> · {{ formatTime(current.at) }}</template>
         </div>
       </div>
@@ -243,10 +254,14 @@ async function notifyMe() {
       <img v-else :key="current.id" :src="current.mediaUrl" class="story__frame" alt="" />
 
       <div class="story__meta" @pointerdown.stop @pointerup.stop>
-        <div class="story__author">
+        <RouterLink
+          class="story__author"
+          :to="{ name: 'profile', params: { id: current.userId } }"
+          :title="`View ${authorOf(current).name}'s profile`"
+        >
           <MemberAvatar :member="authorOf(current)" :size="26" />
           <span>{{ authorOf(current).name }}</span>
-        </div>
+        </RouterLink>
         <p v-if="current.caption" class="story__caption">{{ current.caption }}</p>
       </div>
     </div>
@@ -395,12 +410,38 @@ async function notifyMe() {
 }
 
 .story__author {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
   font-size: 13px;
   font-weight: 700;
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+  color: inherit;
+  text-decoration: none;
+  /* A story is all thumb, so give the tap target real height */
+  padding: 4px 8px 4px 4px;
+  margin: -4px 0 -4px -4px;
+  border-radius: 999px;
+  transition: background 0.15s ease;
+}
+.story__author:active {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* The head avatar and the host's name both lead to the same profile */
+.story__head-avatar {
+  display: inline-flex;
+  border-radius: 50%;
+}
+.story__host-link {
+  color: inherit;
+  text-decoration: none;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.35);
+}
+.story__host-link:active {
+  color: #fff;
+  border-bottom-color: #fff;
 }
 
 .story__caption {

@@ -5,6 +5,7 @@
  */
 import { computed, ref } from 'vue'
 import { useEventStore } from '@/stores/eventStore'
+import { RouterLink } from 'vue-router'
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
 
 const props = defineProps({
@@ -59,14 +60,22 @@ async function act(memberId, approve) {
       </p>
 
       <div v-for="member in requests" :key="member.id" class="requests__row">
-        <MemberAvatar :member="member" :size="42" />
-        <div class="requests__body">
-          <div class="requests__name">{{ member.name }}</div>
-          <div class="requests__stats">
-            ⭐ {{ member.reliability }}% reliable · {{ member.attended }} attended
+        <!-- Deciding whether to approve someone is exactly when you want to
+             read their profile, so the avatar and name lead straight there. -->
+        <RouterLink
+          class="requests__who"
+          :to="{ name: 'profile', params: { id: member.id } }"
+          :title="`View ${member.name}'s profile`"
+        >
+          <MemberAvatar :member="member" :size="42" />
+          <div class="requests__body">
+            <div class="requests__name">{{ member.name }}</div>
+            <div class="requests__stats">
+              ⭐ {{ member.reliability }}% reliable · {{ member.attended }} attended
+            </div>
+            <div v-if="member.bio" class="requests__bio">{{ member.bio }}</div>
           </div>
-          <div v-if="member.bio" class="requests__bio">{{ member.bio }}</div>
-        </div>
+        </RouterLink>
         <div class="requests__actions">
           <button
             class="btn-primary requests__approve"
@@ -146,6 +155,20 @@ async function act(memberId, approve) {
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.04);
   margin-bottom: 10px;
+}
+
+/* Takes over the avatar + body half of the row so the layout is unchanged */
+.requests__who {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.requests__who:active {
+  opacity: 0.75;
 }
 
 .requests__body {
