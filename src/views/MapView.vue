@@ -774,18 +774,26 @@ function onSearchPlace(place) {
 .map-view__notice {
   position: absolute;
   z-index: 46;
-  /* Below the whole top bar (brand + chips, even when wrapped on mobile),
-     and click-through — a toast must never block the next tap */
-  top: max(132px, calc(env(safe-area-inset-top) + 118px));
+  /* Sits under whatever the top bar currently occupies. TopBar measures
+     itself into --wyn-topbar-bottom, because the category row unfolds
+     absolutely and so changes the bar's real height without changing its
+     box — a fixed offset here got printed straight across that open row.
+     Click-through: a toast must never block the next tap. */
+  top: calc(var(--wyn-topbar-bottom, 118px) + 14px);
   left: 50%;
   transform: translateX(-50%);
   padding: 11px 18px;
   font-size: 13.5px;
   color: var(--text-secondary);
-  white-space: nowrap;
-  max-width: calc(100vw - 24px);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Wraps rather than clipping — "try another filter" was losing its end
+     of sentence on a 360px phone. max-content keeps it to one line where
+     there is room; `break-word` rather than `anywhere` so the box does not
+     shrink to its narrowest word and stack up three lines instead. */
+  width: max-content;
+  max-width: min(420px, calc(100vw - 24px));
+  text-align: center;
+  line-height: 1.4;
+  overflow-wrap: break-word;
 }
 
 .map-view__notice-link {

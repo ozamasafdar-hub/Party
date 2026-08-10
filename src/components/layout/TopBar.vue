@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { CATEGORIES } from '@/config/categories'
 import { useEventStore } from '@/stores/eventStore'
@@ -27,6 +27,7 @@ const emit = defineEmits(['signin', 'home', 'filter-changed'])
  */
 const showCats = ref(false)
 const filterWrap = ref(null)
+const catsNav = ref(null)
 
 const activeCat = computed(() =>
   eventStore.activeCategory ? CATEGORIES[eventStore.activeCategory] : null
@@ -43,8 +44,34 @@ function onDocumentPointerDown(event) {
   if (!filterWrap.value?.contains(event.target)) showCats.value = false
 }
 
-onMounted(() => window.addEventListener('pointerdown', onDocumentPointerDown))
-onBeforeUnmount(() => window.removeEventListener('pointerdown', onDocumentPointerDown))
+/**
+ * Overlays on the map have to sit clear of this bar, and how much room it
+ * takes changes when the category row unfolds — the row is absolutely
+ * positioned, so it does not push the wrapper's own box down. Publishing
+ * the measured bottom beats every overlay hard-coding a number that goes
+ * stale the next time this bar is restyled. That is exactly how the
+ * "nothing on for X" toast ended up printed across the open row.
+ */
+function publishTopBarBottom() {
+  const el = (showCats.value && catsNav.value) || filterWrap.value
+  if (!el) return
+  document.documentElement.style.setProperty(
+    '--wyn-topbar-bottom',
+    `${Math.round(el.getBoundingClientRect().bottom)}px`
+  )
+}
+
+watch(showCats, () => nextTick(publishTopBarBottom))
+
+onMounted(() => {
+  window.addEventListener('pointerdown', onDocumentPointerDown)
+  window.addEventListener('resize', publishTopBarBottom)
+  nextTick(publishTopBarBottom)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('pointerdown', onDocumentPointerDown)
+  window.removeEventListener('resize', publishTopBarBottom)
+})
 
 const ringing = ref(false)
 
@@ -177,7 +204,7 @@ watch(
       </button>
 
       <Transition name="fade">
-        <nav v-if="showCats" class="top-bar__filters" aria-label="Filter by category">
+        <nav v-if="showCats" ref="catsNav" class="top-bar__filters" aria-label="Filter by category">
           <button
             v-for="(cat, key) in CATEGORIES"
             :key="key"
