@@ -156,6 +156,18 @@ function onMapTap() {
   showStylePanel.value = false
 }
 
+/**
+ * Closing a card that was opened from another page walks back to that page
+ * rather than leaving you on a map you never chose. The entry is a real one
+ * — the profile pushed it on the way here — so this is an ordinary back,
+ * not a synthesized history hop.
+ */
+function closeCard() {
+  const returning = !!eventStore.cardReturnTo
+  eventStore.clearSelection()
+  if (returning) router.back()
+}
+
 function onSelect(eventId) {
   if (pickMode.value) return
   showList.value = false
@@ -604,7 +616,8 @@ function onSearchPlace(place) {
       <div v-if="selectedEvent" class="map-view__sheet">
         <EventCard
           :event="selectedEvent"
-          @close="eventStore.clearSelection()"
+          :can-go-back="!!eventStore.cardReturnTo"
+          @close="closeCard"
           @edit="onEdit"
           @login-required="onJoinLoginRequired"
           @recap="openRecap($event.id)"

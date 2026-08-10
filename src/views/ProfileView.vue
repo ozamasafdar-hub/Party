@@ -137,8 +137,20 @@ async function toggleFollow() {
 }
 
 function openEvent(eventId) {
-  eventStore.select(eventId)
+  // Remember where we stood, so the card's back arrow returns here
+  eventStore.selectFrom(eventId, route.fullPath)
   router.push({ name: 'map' })
+}
+
+/**
+ * Back to wherever you actually came from — the inbox, a story you tapped
+ * through, another profile. vue-router records the previous entry in
+ * history.state.back; when there isn't one (a shared link opened cold) the
+ * map is the sensible home. Read at click time so it is never stale.
+ */
+function goBack() {
+  if (window.history.state?.back) router.back()
+  else router.push({ name: 'map' })
 }
 
 function messageMember() {
@@ -155,9 +167,7 @@ function logout() {
 <template>
   <div class="profile">
     <div class="profile__inner">
-      <button class="btn-ghost profile__back" @click="router.push({ name: 'map' })">
-        ← Back to map
-      </button>
+      <button class="btn-ghost profile__back" @click="goBack">← Back</button>
 
       <template v-if="member">
         <header class="profile__header glass-panel">

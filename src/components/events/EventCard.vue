@@ -30,7 +30,10 @@ import HostProModal from '@/components/pro/HostProModal.vue'
 import { useHostPermissions } from '@/composables/useHostPermissions'
 
 const props = defineProps({
-  event: { type: Object, required: true }
+  event: { type: Object, required: true },
+  // True when this card was opened from another page (a profile, say), so
+  // the close control should read as "back" and return there
+  canGoBack: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['close', 'edit', 'login-required', 'recap'])
@@ -402,8 +405,15 @@ onBeforeUnmount(() => chatStore.close())
 
 <template>
   <article class="event-card glass-panel">
-    <!-- Outside the scroller, so it stays reachable however far you scroll -->
-    <button class="event-card__close" aria-label="Close" @click="emit('close')">✕</button>
+    <!-- Outside the scroller, so it stays reachable however far you scroll.
+         Reads ← when you arrived from another page, ✕ when the map is
+         already behind it. -->
+    <button
+      class="event-card__close"
+      :class="{ 'event-card__close--back': canGoBack }"
+      :aria-label="canGoBack ? 'Back' : 'Close'"
+      @click="emit('close')"
+    >{{ canGoBack ? '←' : '✕' }}</button>
 
     <div class="event-card__scroll">
     <img

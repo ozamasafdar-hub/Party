@@ -38,6 +38,9 @@ export const useEventStore = defineStore('events', {
     memories: [], // 24h post-event recap photos/clips
     mapMode: 'live', // 'live' | 'memories' (📸 past-24h recaps layer)
     selectedEventId: null,
+    // Set when a card is opened from another page, so its close button can
+    // be a back arrow that returns there — see selectFrom()
+    cardReturnTo: null,
     activeCategory: null, // null = show every category
     timeWindow: 'all', // 'all' | 'now' | 'today' | 'week'
     onlyMine: false, // just events I host / attend / wait on
@@ -200,10 +203,24 @@ export const useEventStore = defineStore('events', {
 
     select(eventId) {
       this.selectedEventId = eventId
+      // A card opened on the map has nowhere to go back to. Clearing here
+      // means a stale origin can never outlive the card that set it.
+      this.cardReturnTo = null
+    },
+
+    /**
+     * Open a card from another page — a profile, the inbox, anywhere that
+     * isn't the map. The card's ✕ becomes a ← that returns you there,
+     * rather than dropping you on a map you never came from.
+     */
+    selectFrom(eventId, returnTo) {
+      this.selectedEventId = eventId
+      this.cardReturnTo = returnTo || null
     },
 
     clearSelection() {
       this.selectedEventId = null
+      this.cardReturnTo = null
     },
 
     setCategory(category) {
