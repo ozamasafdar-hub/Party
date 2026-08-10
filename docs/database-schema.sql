@@ -1325,3 +1325,73 @@ begin
   return new;
 end;
 $$;
+
+-- ----------------------------------------------------------------------------
+-- Migration 012 — the complete join gate (supersedes every definition of
+-- enforce_event_capacity above). Migration 011 replaced this function and
+-- lost the PRO_ONLY check from 007; anything that replaces it in future
+-- must carry all five: EVENT_ENDED, LADIES_ONLY, PRO_ONLY,
+-- RELIABILITY_TOO_LOW, EVENT_FULL.
+-- ----------------------------------------------------------------------------
+create or replace function public.enforce_event_capacity()
+returns trigger
+language plpgsql
+security definer
+as $$
+declare
+  current_count integer;
+  cap           integer;
+  min_rel       integer;
+  score         numeric;
+  ev            public.events%rowtype;
+  joiner_gender text;
+  joiner_tier   text;
+begin
+  select * into ev from public.events where id = new.event_id for update;
+  cap := ev.max_capacity;
+  min_rel := ev.min_reliability;
+
+  -- Everything in here is about letting someone ELSE in. The host is always
+  -- allowed on their own event, before and after it runs.
+  if new.user_id <> ev.host_id then
+
+    if ev.starts_at + make_interval(mins => ev.duration_minutes) < now() then
+      raise exception 'EVENT_ENDED: this event has already finished';
+    end if;
+
+    if ev.is_ladies_only then
+      select gender into joiner_gender from public.profiles where id = new.user_id;
+      if joiner_gender is distinct from 'female' then
+        raise exception 'LADIES_ONLY: this event is for women only';
+      end if;
+    end if;
+
+    if coalesce(ev.pro_only, false) and new.status in ('going', 'requested') then
+      select subscription_tier into joiner_tier
+        from public.profiles where id = new.user_id;
+      if coalesce(joiner_tier, 'free') <> 'host_pro' then
+        raise exception 'PRO_ONLY: this event is open to Host Pro members only';
+      end if;
+    end if;
+
+    if min_rel is not null and new.status in ('going', 'requested') then
+      select reliability_score into score
+        from public.profiles where id = new.user_id;
+      if coalesce(score, 100) < min_rel then
+        raise exception 'RELIABILITY_TOO_LOW: this host requires a % percent attendance record or better', min_rel;
+      end if;
+    end if;
+
+  end if;
+
+  select count(*) into current_count
+  from public.rsvps
+  where event_id = new.event_id and status = 'going';
+
+  if new.status = 'going' and current_count >= cap then
+    raise exception 'EVENT_FULL: this event has reached max capacity';
+  end if;
+
+  return new;
+end;
+$$;

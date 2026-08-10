@@ -117,6 +117,10 @@ function demoGateHostTier(data, host) {
 }
 
 function demoGateReliability(event, userId) {
+  // A host is not a guest applying to their own event — without this, a host
+  // whose own record sits under the floor they set is locked off their own
+  // guestlist. Live mode exempts them in the capacity trigger too.
+  if (event.hostId === userId) return
   if (event.minReliability != null && demoReliabilityOf(userId) < event.minReliability) {
     throw new Error(
       `This host requires a ${event.minReliability}%+ attendance record`
