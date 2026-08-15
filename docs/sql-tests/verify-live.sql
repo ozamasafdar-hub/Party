@@ -124,11 +124,47 @@ with checks(sort, label, ok) as (
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname = 'handle_new_user'
 
+  -- Migration 014: a profile can outlive its login, so leaving erases the
+  -- person without destroying other people's evenings
+  union all
+  select 18, 'a profile can outlive its login          (migration 014)',
+         not exists (
+           select 1 from pg_constraint
+            where conname = 'profiles_id_fkey'
+              and conrelid = 'public.profiles'::regclass
+         )
+
+  union all
+  select 19, 'profiles carry a tombstone marker',
+         exists (
+           select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'profiles'
+              and column_name = 'deleted_at'
+         )
+
+  union all
+  select 20, 'members can delete their own account',
+         exists (
+           select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = 'public' and p.proname = 'delete_my_account'
+         )
+
+  union all
+  select 21, 'the gender freeze allows an erasure',
+         pg_get_functiondef(p.oid) like '%deleted_at is null%'
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'freeze_gender'
+
   union all
   -- Anyone still holding null simply cannot see women-only events until
   -- they answer the prompt. Informational, not a failure.
-  select 18, 'members still to answer: ' ||
+  select 22, 'members still to answer: ' ||
              (select count(*)::text from public.profiles where gender is null),
+         true
+
+  union all
+  select 23, 'members who have left: ' ||
+             (select count(*)::text from public.profiles where deleted_at is not null),
          true
 )
 select case when ok then 'PASS' else 'FAIL' end as result, label
