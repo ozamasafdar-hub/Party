@@ -167,7 +167,18 @@ function logout() {
 <template>
   <div class="profile">
     <div class="profile__inner">
-      <button class="btn-ghost profile__back" @click="goBack">← Back</button>
+      <div class="profile__topline">
+        <button class="btn-ghost profile__back" @click="goBack">← Back</button>
+        <!-- Only on your own profile: this page renders other members too -->
+        <RouterLink
+          v-if="isSelf"
+          class="btn-ghost profile__settings"
+          :to="{ name: 'settings' }"
+          title="Settings"
+        >
+          ⚙️ Settings
+        </RouterLink>
+      </div>
 
       <template v-if="member">
         <header class="profile__header glass-panel">
@@ -338,8 +349,17 @@ function logout() {
   padding: 24px 16px 60px;
 }
 
-.profile__back {
+.profile__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin-bottom: 18px;
+}
+
+.profile__settings {
+  text-decoration: none;
+  font-size: 13.5px;
 }
 
 .profile__header {

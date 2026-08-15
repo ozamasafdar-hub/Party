@@ -295,6 +295,46 @@ export const useAuthStore = defineStore('auth', {
     },
 
     /**
+     * Leave WYN.
+     *
+     * Erases the person and keeps the record — see migration 014. The
+     * database does the careful part: upcoming events they host are
+     * cancelled rather than deleted, so their guests are told instead of
+     * turning up to nothing.
+     */
+    async deleteAccount() {
+      if (!this.currentUser) throw new Error('There is no account to delete.')
+      const id = this.currentUser.id
+
+      if (isLive) {
+        const { error } = await supabase.rpc('delete_my_account')
+        if (error) {
+          throw new Error(
+            /delete_my_account/.test(error.message)
+              ? 'Deleting an account needs a database update — run docs/migration-014-leaving-wyn.sql first.'
+              : error.message
+          )
+        }
+        await supabase.auth.signOut()
+        this.currentUser = null
+        return
+      }
+
+      // Demo mirrors the same shape: the member row survives as a
+      // tombstone so guestlists and chat logs still resolve a name.
+      const { demoDeleteAccount } = await import('@/services/eventService')
+      await demoDeleteAccount(id)
+
+      const accounts = readAccounts()
+      for (const email of Object.keys(accounts)) {
+        if (accounts[email].user?.id === id) delete accounts[email]
+      }
+      storage.set(ACCOUNTS_KEY, JSON.stringify(accounts))
+      storage.remove(SESSION_KEY)
+      this.currentUser = null
+    },
+
+    /**
      * The one-time answer, for members who joined before sign-up asked.
      * Separate from updateProfile so the prompt does not have to resend a
      * name, bio and avatar it never showed the member.

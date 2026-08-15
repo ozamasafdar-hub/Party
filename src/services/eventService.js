@@ -1397,3 +1397,58 @@ export const unblockMember = (...a) => backend.unblockMember(...a)
 export const upsertDemoMember = (user) => {
   if (!isLive) demoUpsertMember(user)
 }
+
+/**
+ * Demo only — the same shape migration 014 gives the live database.
+ *
+ * The member row survives as a tombstone so guestlists, chat logs and
+ * recaps still resolve a name; upcoming events they host are cancelled
+ * rather than deleted, so the people who joined them are told instead of
+ * finding an evening that quietly vanished.
+ */
+export const demoDeleteAccount = async (memberId) => {
+  if (isLive) return
+  const now = Date.now()
+
+  for (const event of db.events) {
+    const ends = new Date(event.startsAt).getTime() + event.durationMinutes * 60000
+    if (ends <= now) continue // past events are other people's record too
+    if (event.hostId === memberId) event.cancelled = true
+    // They are not coming, so give the spot back
+    event.attendeeIds = event.attendeeIds.filter((id) => id !== memberId)
+    event.requestedIds = (event.requestedIds || []).filter((id) => id !== memberId)
+    event.waitlistIds = (event.waitlistIds || []).filter((id) => id !== memberId)
+  }
+
+  const goneThreads = new Set(
+    db.dmThreads.filter((t) => t.memberA === memberId || t.memberB === memberId).map((t) => t.id)
+  )
+  db.dmThreads = db.dmThreads.filter((t) => !goneThreads.has(t.id))
+  db.dmMessages = db.dmMessages.filter((m) => !goneThreads.has(m.threadId))
+
+  // Demo follows live in localStorage, one key per follower — drop their
+  // own list, and take them out of everybody else's
+  try {
+    localStorage.removeItem(`wyn:follows:${memberId}`)
+    for (const key of Object.keys(localStorage)) {
+      if (!key.startsWith('wyn:follows:')) continue
+      const ids = JSON.parse(localStorage.getItem(key)) || []
+      if (!ids.includes(memberId)) continue
+      localStorage.setItem(key, JSON.stringify(ids.filter((id) => id !== memberId)))
+    }
+  } catch {
+    /* sandboxed iframe — nothing was persisted to clean up */
+  }
+
+  const member = db.members.find((m) => m.id === memberId)
+  if (member) {
+    member.name = 'Former member'
+    member.initials = '—'
+    member.avatarUrl = null
+    member.bio = ''
+    member.gender = null
+    member.deletedAt = new Date().toISOString()
+  }
+
+  emit({ type: 'SYNC', events: await demo.listEvents() })
+}

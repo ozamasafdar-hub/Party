@@ -67,6 +67,8 @@ const osm = {
  */
 export const BASEMAPS = {
   streets: {
+    // Land, parks and sea, as this style actually renders them
+    swatch: 'linear-gradient(135deg, #efe7d8 0%, #cfe3b8 45%, #8fd0e0 100%)',
     label: 'Streets',
     emoji: '🗺️',
     description: 'Colourful streets and places',
@@ -76,6 +78,7 @@ export const BASEMAPS = {
     sources: [[carto('rastertiles/voyager')], [osm]]
   },
   minimal: {
+    swatch: 'linear-gradient(135deg, #f7f7f7 0%, #e6e8ea 55%, #cfd8dc 100%)',
     label: 'Minimal',
     emoji: '🤍',
     description: 'Clean and quiet — pins pop',
@@ -90,6 +93,7 @@ export const BASEMAPS = {
     ]
   },
   satellite: {
+    swatch: 'linear-gradient(135deg, #3b4a32 0%, #6b6244 50%, #1d3b4a 100%)',
     label: 'Satellite',
     emoji: '🛰️',
     description: 'Aerial imagery with labels',
@@ -97,6 +101,7 @@ export const BASEMAPS = {
     sources: [[esri('World_Imagery'), esri('Reference/World_Boundaries_and_Places')]]
   },
   soft: {
+    swatch: 'linear-gradient(135deg, #f0e6d2 0%, #e8dcc0 45%, #7ecfd6 100%)',
     label: 'Soft',
     emoji: '🩵',
     description: 'Cream land, turquoise sea — works offline',

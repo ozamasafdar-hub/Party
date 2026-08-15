@@ -15,7 +15,6 @@ import EventCard from '@/components/events/EventCard.vue'
 import CreateEventModal from '@/components/events/CreateEventModal.vue'
 import EventListPanel from '@/components/events/EventListPanel.vue'
 import LoginPanel from '@/components/auth/LoginPanel.vue'
-import MapStyleControl from '@/components/map/MapStyleControl.vue'
 import MapSearchBar from '@/components/map/MapSearchBar.vue'
 import MapSearchPanel from '@/components/map/MapSearchPanel.vue'
 import TimePills from '@/components/map/TimePills.vue'
@@ -30,7 +29,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useNotifStore } from '@/stores/notifStore'
 import { useFollowStore } from '@/stores/followStore'
 import { useDmStore } from '@/stores/dmStore'
-import { BASEMAPS, DEFAULT_BASEMAP } from '@/config/map'
+import { usePrefsStore } from '@/stores/prefsStore'
 
 const route = useRoute()
 const router = useRouter()
@@ -39,24 +38,7 @@ const authStore = useAuthStore()
 const notifStore = useNotifStore()
 const followStore = useFollowStore()
 const dmStore = useDmStore()
-
-const STYLE_KEY = 'wyn:map-style'
-const HEAT_KEY = 'wyn:map-heat'
-
-const readPref = (key) => {
-  try {
-    return localStorage.getItem(key)
-  } catch {
-    return null
-  }
-}
-const writePref = (key, value) => {
-  try {
-    localStorage.setItem(key, value)
-  } catch {
-    /* sandboxed iframe — preference just won't persist */
-  }
-}
+const prefsStore = usePrefsStore()
 
 const liveMap = ref(null)
 const pickMode = ref(false)
@@ -68,21 +50,12 @@ const editingEvent = ref(null)
 const showList = ref(false)
 const showSearch = ref(false)
 
-// Map style + heatmap, remembered between visits
-const storedStyle = readPref(STYLE_KEY)
-const mapStyle = ref(BASEMAPS[storedStyle] ? storedStyle : DEFAULT_BASEMAP)
-const showHeat = ref(readPref(HEAT_KEY) === '1')
-const showStylePanel = ref(false)
-
-function setMapStyle(key) {
-  mapStyle.value = key
-  writePref(STYLE_KEY, key)
-}
-
-function setHeat(on) {
-  showHeat.value = on
-  writePref(HEAT_KEY, on ? '1' : '0')
-}
+/**
+ * Map style and heat are chosen in Settings now, so they live in a store
+ * rather than here — the map has to follow a change made on another screen.
+ */
+const mapStyle = computed(() => prefsStore.mapStyle)
+const showHeat = computed(() => prefsStore.showHeat)
 
 const fallbackNotice = ref(false)
 let noticeTimer = null
@@ -101,7 +74,7 @@ const isEmbeddedPreview = (() => {
 
 function onTileFallback() {
   // Raster tiles unreachable — the map switched itself to the chart
-  mapStyle.value = 'soft'
+  prefsStore.setMapStyle('soft')
   fallbackNotice.value = true
   clearTimeout(noticeTimer)
   noticeTimer = setTimeout(() => (fallbackNotice.value = false), isEmbeddedPreview ? 12000 : 5000)
@@ -154,7 +127,6 @@ function onMapTap() {
   eventStore.clearSelection()
   showList.value = false
   showSearch.value = false
-  showStylePanel.value = false
 }
 
 /**
@@ -495,14 +467,6 @@ function onSearchPlace(place) {
       >
         📋
       </button>
-      <button
-        class="map-view__ctrl chip-surface"
-        :class="{ 'map-view__ctrl--active': showStylePanel }"
-        title="Map style"
-        @click="showStylePanel = !showStylePanel"
-      >
-        🌍
-      </button>
     </div>
 
     <!-- Action confirmations (joined, waitlisted, left) -->
@@ -523,19 +487,6 @@ function onSearchPlace(place) {
         <template v-else>
           Couldn't reach the map tile server — showing the offline chart instead.
         </template>
-      </div>
-    </Transition>
-
-    <!-- Map style picker -->
-    <Transition name="fade">
-      <div v-if="showStylePanel" class="map-view__style">
-        <MapStyleControl
-          :style-key="mapStyle"
-          :show-heat="showHeat"
-          @update:style="setMapStyle"
-          @update:heat="setHeat"
-          @close="showStylePanel = false"
-        />
       </div>
     </Transition>
 
@@ -801,13 +752,6 @@ function onSearchPlace(place) {
   transform: translateX(-50%);
 }
 
-.map-view__style {
-  position: absolute;
-  z-index: 45;
-  right: 72px;
-  bottom: 190px;
-}
-
 .map-view__notice {
   position: absolute;
   z-index: 46;
@@ -864,11 +808,7 @@ function onSearchPlace(place) {
 }
 
 @media (max-width: 520px) {
-  .map-view__style {
-    right: 60px;
-    bottom: 108px;
   }
-}
 
 .map-view__login-backdrop {
   position: fixed;
