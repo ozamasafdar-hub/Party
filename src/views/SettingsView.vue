@@ -187,8 +187,16 @@ function onDeleted() {
 </template>
 
 <style scoped>
+/**
+ * height, not min-height. The app locks the document — html, body and #app
+ * are `height: 100%; overflow: hidden` so the map cannot be scrolled off
+ * the screen — which means a page has to be its own scroller. With
+ * min-height this element grew past the viewport instead, and the overflow
+ * landed on #app, where it was hidden: everything below the fold became
+ * unreachable on a phone. ProfileView and InboxView already do it this way.
+ */
 .settings {
-  min-height: 100vh;
+  height: 100%;
   background: var(--bg-900, #0b0f19);
   padding: max(18px, env(safe-area-inset-top)) 0 40px;
   overflow-y: auto;
