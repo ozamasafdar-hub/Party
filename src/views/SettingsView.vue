@@ -15,13 +15,22 @@ import { useAuthStore } from '@/stores/authStore'
 import { usePrefsStore } from '@/stores/prefsStore'
 import { useDmStore } from '@/stores/dmStore'
 import { BASEMAPS } from '@/config/map'
-import { SUPPORT_WHATSAPP, supportLink, GENDER_TOPIC } from '@/config/support'
+import { supportLink, GENDER_TOPIC } from '@/config/support'
 import DeleteAccountModal from '@/components/profile/DeleteAccountModal.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const prefsStore = usePrefsStore()
 const dmStore = useDmStore()
+
+/**
+ * Vite's define replaces this token in script source. It cannot do the
+ * same inside a template, where Vue compiles a bare identifier into a
+ * component-context lookup and it silently renders as nothing — which is
+ * exactly what it did until a screenshot showed "Version" with no number
+ * after it.
+ */
+const version = __APP_VERSION__
 
 const me = computed(() => authStore.currentUser)
 const showDelete = ref(false)
@@ -68,7 +77,6 @@ function onDeleted() {
           <span class="settings__row-icon">💬</span>
           <span class="settings__row-body">
             <span class="settings__row-name">Message us on WhatsApp</span>
-            <span class="settings__row-desc">{{ SUPPORT_WHATSAPP }}</span>
           </span>
           <span class="settings__row-go">↗</span>
         </a>
@@ -144,7 +152,7 @@ function onDeleted() {
           <span class="settings__row-icon">📍</span>
           <span class="settings__row-body">
             <span class="settings__row-name">WYN — Qatar's social map</span>
-            <span class="settings__row-desc">Version {{ __APP_VERSION__ }}</span>
+            <span class="settings__row-desc">Version {{ version }}</span>
           </span>
         </div>
       </section>
