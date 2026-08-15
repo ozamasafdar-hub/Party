@@ -64,29 +64,87 @@ function pickMode(mode, label) {
 </template>
 
 <style scoped>
+/**
+ * The row is narrower than the screen — it keeps clear of the map controls
+ * stacked on the right — so there is always more here than fits, and the
+ * pill that straddles the edge used to be guillotined: a dead-straight
+ * vertical cut through a rounded shape, which is the one genuinely square
+ * edge in the whole control. The mask fades those last few pixels instead,
+ * so a pill leaving the row dissolves rather than hitting a wall. The
+ * padding is the lead-in the fade eats into, so the first pill sits clear
+ * of it when the row has not been scrolled.
+ */
 .time-pills {
   display: flex;
   gap: 8px;
-  max-width: 100%;
+  align-self: stretch;
   overflow-x: auto;
-  padding: 4px;
+  padding: 4px 16px;
   scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  scroll-padding: 0 16px;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 16px,
+    #000 calc(100% - 16px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 16px,
+    #000 calc(100% - 16px),
+    transparent 100%
+  );
+}
+
+/**
+ * Below this width the FAB column is pinned by `calc(100vw - 136px)`, which
+ * is symmetric — it reserves as much room on the left, where nothing sits,
+ * as on the right, where the map controls do. Take the empty side back:
+ * one more pill fits before anything has to scroll.
+ */
+@media (max-width: 695px) {
+  .time-pills {
+    margin-left: -54px;
+  }
 }
 
 .time-pills::-webkit-scrollbar {
   display: none;
 }
 
+/**
+ * These were already `border-radius: 999px`, and still read as slabs: a
+ * flat fill on a shape three times wider than it is tall looks like a bar
+ * with two caps stuck on the ends. What makes a dark shape read as *curved*
+ * is light falling across it — the top-down highlight gradient and the
+ * inset hairline — plus enough height that the caps are a real part of the
+ * silhouette rather than a detail.
+ */
 .time-pills__pill {
   flex-shrink: 0;
-  padding: 9px 16px;
+  scroll-snap-align: start;
+  /* Set the height rather than let padding plus font metrics land wherever
+     they land — an emoji changes the line box, and the radius reads as a
+     true capsule only when the height is the number we chose */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 18px;
   border-radius: 999px;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
-  background: rgba(15, 20, 32, 0.92);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0) 55%),
+    rgba(15, 20, 32, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.13);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    0 4px 14px rgba(0, 0, 0, 0.32);
   transition: all 0.15s ease;
 }
 
@@ -102,14 +160,23 @@ function pickMode(mode, label) {
  */
 @media (hover: hover) {
   .time-pills__pill:not(.time-pills__pill--active):not(.time-pills__pill--memory-active):hover {
-    background: rgba(255, 255, 255, 0.12);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.03) 55%),
+      rgba(28, 36, 52, 0.94);
+    border-color: rgba(255, 255, 255, 0.22);
   }
 }
 
+/* Every state keeps the highlight layer on top — drop it and that state
+   alone flattens back into a slab */
 .time-pills__pill--active {
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);
-  border-color: rgba(255, 255, 255, 0.25);
-  box-shadow: 0 2px 10px rgba(139, 21, 56, 0.45);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 60%),
+    linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 4px 16px rgba(139, 21, 56, 0.45);
 }
 
 .time-pills__pill--memory {
@@ -117,8 +184,12 @@ function pickMode(mode, label) {
 }
 
 .time-pills__pill--memory-active {
-  background: linear-gradient(135deg, #7c5cd6 0%, #a78bfa 60%, #d4af6a 130%);
-  border-color: rgba(255, 255, 255, 0.3);
-  box-shadow: 0 4px 18px rgba(167, 139, 250, 0.5);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 60%),
+    linear-gradient(135deg, #7c5cd6 0%, #a78bfa 60%, #d4af6a 130%);
+  border-color: rgba(255, 255, 255, 0.32);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 6px 20px rgba(167, 139, 250, 0.5);
 }
 </style>
