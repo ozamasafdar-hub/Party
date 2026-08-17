@@ -55,7 +55,21 @@ const router = createRouter({
 // Members-only gate: every route flagged requiresAuth bounces to /login
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
-  await auth.restoreSession()
+
+  /**
+   * Only the pages that gate on it wait for the answer.
+   *
+   * The map is public, and it used to sit behind this await like everything
+   * else — so a slow or unreachable backend held up the very first render
+   * and the app showed nothing at all. Kicking the restore off without
+   * waiting lets the map paint immediately and the top bar fill in your
+   * name a moment later, which is the ordinary way a page loads rather than
+   * a failure. Guarded routes still need a real answer before they can
+   * decide, so they still wait — bounded, in the store.
+   */
+  const needsAnswer = to.meta.requiresAuth || to.name === 'login'
+  if (needsAnswer) await auth.restoreSession()
+  else auth.restoreSession()
 
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }

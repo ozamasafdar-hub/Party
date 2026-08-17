@@ -4,7 +4,48 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0b0f19" />
-    <title>WYN — Qatar Social Events</title>
+    <title>WYN — see what’s on in Qatar</title>
+    <meta
+      name="description"
+      content="A live map of what’s happening around Doha tonight. Find an event, join it, or host your own."
+    />
+
+    <!--
+      Link previews. Everything here is the same on every host; the three
+      tags that must carry the full domain (og:url, og:image, twitter:image)
+      are injected at build time from site.config.js — see build/site-plugin.js.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="WYN" />
+    <meta property="og:title" content="WYN — see what’s on in Qatar" />
+    <meta
+      property="og:description"
+      content="A live map of what’s happening around Doha tonight. Find an event, join it, or host your own."
+    />
+    <meta property="og:locale" content="en_QA" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="WYN — a live map of what’s on in Qatar tonight" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="WYN — see what’s on in Qatar" />
+    <meta
+      name="twitter:description"
+      content="A live map of what’s happening around Doha tonight. Find an event, join it, or host your own."
+    />
+
+    <!--
+      Add to Home Screen. iOS reads none of the manifest: the apple-touch-icon
+      and the two apple- meta tags below are the whole of its support, and
+      without them WYN installs as a screenshot of the page in a browser
+      frame. Android reads the manifest and ignores these.
+    -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="WYN" />
+    <!-- translucent: the map runs under the status bar, as it does in-app -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link
       rel="icon"
       type="image/svg+xml"

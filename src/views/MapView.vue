@@ -30,6 +30,7 @@ import { useNotifStore } from '@/stores/notifStore'
 import { useFollowStore } from '@/stores/followStore'
 import { useDmStore } from '@/stores/dmStore'
 import { usePrefsStore } from '@/stores/prefsStore'
+import { SITE_URL } from '@/config/site'
 
 const route = useRoute()
 const router = useRouter()
@@ -60,7 +61,6 @@ const showHeat = computed(() => prefsStore.showHeat)
 const fallbackNotice = ref(false)
 let noticeTimer = null
 
-const SITE_URL = 'https://ozamasafdar-hub.github.io/Party/'
 
 // Embedded previews (e.g. the claude.ai demo frame) can never reach tile
 // servers — point people at the full site instead of a dead-end message
@@ -476,6 +476,24 @@ function onSearchPlace(place) {
       </div>
     </Transition>
 
+    <!--
+      Back from the link in a confirmation email. A member who clicks that
+      link and lands on a map with no acknowledgement has no way to tell a
+      working sign-up from a broken one — least of all when the link has
+      simply expired.
+    -->
+    <Transition name="fade">
+      <button
+        v-if="authStore.callbackNotice"
+        class="map-view__notice map-view__notice--auth glass-panel"
+        :class="{ 'map-view__notice--auth-bad': !authStore.callbackNotice.ok }"
+        @click="authStore.dismissCallback()"
+      >
+        {{ authStore.callbackNotice.ok ? '✅' : '⚠️' }}
+        {{ authStore.callbackNotice.message }}
+      </button>
+    </Transition>
+
     <!-- Tile-fallback notice -->
     <Transition name="fade">
       <div v-if="fallbackNotice" class="map-view__notice glass-panel">
@@ -775,6 +793,21 @@ function onSearchPlace(place) {
   text-align: center;
   line-height: 1.4;
   overflow-wrap: break-word;
+}
+
+/* Louder than the tile-fallback notice it shares a box with: this one is
+   the answer to "did my sign-up work?", and it is tappable to dismiss */
+.map-view__notice--auth {
+  color: var(--text-primary);
+  font-weight: 600;
+  border-color: rgba(45, 212, 160, 0.45);
+  box-shadow: var(--shadow-card), 0 0 0 1px rgba(45, 212, 160, 0.18);
+  cursor: pointer;
+}
+
+.map-view__notice--auth-bad {
+  border-color: rgba(244, 88, 122, 0.5);
+  box-shadow: var(--shadow-card), 0 0 0 1px rgba(244, 88, 122, 0.2);
 }
 
 .map-view__notice-link {

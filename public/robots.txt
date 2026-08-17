@@ -1,0 +1,6 @@
+# WYN. The map is public — anyone can see what's on before joining — so the
+# landing page is fair game for search engines. There is nothing else for a
+# crawler to reach: every member page is behind the auth gate, and the app
+# routes on the hash, which crawlers do not follow.
+User-agent: *
+Allow: /

@@ -2,6 +2,9 @@ node_modules
 dist
 dist-single
 dist-ssr
+# A throwaway build with a deliberately unreachable backend, for testing
+# what a member sees when Supabase cannot be reached
+dist-test
 *.local
 .env
 .env.*

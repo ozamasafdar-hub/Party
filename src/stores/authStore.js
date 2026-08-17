@@ -6,6 +6,13 @@ const SESSION_KEY = 'wyn:session'
 const ACCOUNTS_KEY = 'wyn:accounts'
 
 /**
+ * How long a guarded page waits for the backend before giving up and
+ * rendering signed-out. Long enough that a slow phone connection still
+ * finishes; short enough that a dead backend is a pause, not a hang.
+ */
+const RESTORE_TIMEOUT_MS = 8000
+
+/**
  * Email + password accounts, two modes:
  *
  *  - LIVE (Supabase configured): real Supabase Auth. Profiles are created
@@ -92,7 +99,13 @@ export const useAuthStore = defineStore('auth', {
   state: () => ({
     currentUser: null,
     isLiveMode: isLive,
-    restorePromise: null
+    restorePromise: null,
+    /**
+     * Set once, at boot, when we arrived from a confirmation email —
+     * `{ ok, message }`. Without it a member who clicks the link in their
+     * inbox lands on the map with nothing at all to say whether it worked.
+     */
+    callbackNotice: null
   }),
 
   getters: {
@@ -100,15 +113,53 @@ export const useAuthStore = defineStore('auth', {
   },
 
   actions: {
+    /** Handed the result of consumeAuthCallback() by main.js. */
+    noteCallback(result) {
+      this.callbackNotice = result
+      // A success explains itself and can go on its own. A failure is the
+      // member's only clue about what to do next, so it waits to be read.
+      if (result?.ok) setTimeout(() => this.dismissCallback(), 6000)
+    },
+
+    dismissCallback() {
+      this.callbackNotice = null
+    },
+
     /** Idempotent; async in live mode. The router guard awaits this. */
     restoreSession() {
       this.restorePromise ??= isLive ? this._restoreLive() : this._restoreDemo()
       return this.restorePromise
     },
 
+    /**
+     * Bounded, and it never rejects. Both parts are load-bearing.
+     *
+     * A profile query against an unreachable backend does not fail — it
+     * never settles at all. Measured: with the connection refused,
+     * `from('profiles').select()` was still pending after five seconds and
+     * showed no sign of stopping. Anything awaiting it waits forever, and a
+     * rejection would be no better, since a throw inside the router guard
+     * aborts the first navigation and paints nothing either. Either way the
+     * member gets a white screen with no map and no error — and a paused
+     * free-tier project looks exactly like this from the outside.
+     *
+     * So: give up after a while and render signed-out over the public map.
+     * Nothing is lost. The session stays in storage, and if the query does
+     * come back late it still fills the profile in behind the scenes.
+     */
     async _restoreLive() {
-      const { data } = await supabase.auth.getSession()
-      if (data.session) await this._loadProfile(data.session.user.id)
+      const load = (async () => {
+        const { data } = await supabase.auth.getSession()
+        if (data.session) await this._loadProfile(data.session.user.id)
+      })().catch(() => {
+        this.currentUser = null
+      })
+
+      await Promise.race([
+        load,
+        new Promise((resolve) => setTimeout(resolve, RESTORE_TIMEOUT_MS))
+      ])
+
       supabase.auth.onAuthStateChange((_evt, session) => {
         if (!session) this.currentUser = null
       })
