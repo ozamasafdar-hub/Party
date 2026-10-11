@@ -1,0 +1,34 @@
+name: Tile providers
+
+# Monitoring, not testing — which is why it is on a schedule and not on
+# every push. The question it asks is "has an external company changed
+# their mind since yesterday?", and that has an answer once a day, not once
+# a commit. Keeping it out of the Tests workflow also stops a provider's
+# bad afternoon from colouring a run that is really about our own code.
+#
+# It exists because CARTO began serving "API KEY REQUIRED" across every
+# tile. The live map was a wall of watermarks for we-don't-know-how-long,
+# because those tiles come back HTTP 200 and nothing we had could tell.
+
+on:
+  schedule:
+    # 05:12 UTC — 08:12 in Doha, so a break is found over morning coffee
+    # rather than at midnight. Odd minute to avoid the scheduler rush.
+    - cron: '12 5 * * *'
+  workflow_dispatch:
+  push:
+    # Also whenever the map's own configuration changes, since that is the
+    # other way a tile URL becomes wrong
+    paths:
+      - 'src/config/map.js'
+      - 'scripts/check-tiles.js'
+
+jobs:
+  tiles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/check-tiles.js

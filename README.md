@@ -177,6 +177,7 @@ domain), and zone/neighbourhood/locality boundaries from
 npm test                         # browser specs, both builds
 bash docs/sql-tests/run.sh       # the database rules, on a real Postgres
 node tests/negative-control.js   # prove the suite can still fail
+node scripts/check-tiles.js      # are the map providers still serving maps?
 ```
 
 Two halves, because the rules live in two places. The browser specs in

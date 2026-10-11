@@ -1,10 +1,22 @@
 /**
  * Map configuration for Qatar.
  *
- * Every basemap below is free with no API key. CARTO styles use the {r}
- * retina modifier, so high-DPI screens automatically receive @2x UHD
- * tiles. The "soft" style is the bundled offline vector basemap — it is
- * also the automatic fallback whenever raster tiles can't load.
+ * Every basemap below is free and needs no API key — which is a constraint
+ * worth stating plainly, because it has already been broken once.
+ *
+ * CARTO used to serve the Streets and Minimal styles. In October 2026 they
+ * began answering unauthenticated requests with a tile that reads
+ * "API KEY REQUIRED" across it, and the map turned into a wall of
+ * watermarks on the live site. Nothing errored: those tiles come back
+ * HTTP 200, so the offline fallback below never fired and could not have.
+ *
+ * `scripts/check-tiles.js` exists because of that day. Run it before
+ * trusting any new source.
+ *
+ * The "soft" style is the bundled offline vector basemap. It is the
+ * default, it needs no network at all, and it is the automatic fallback
+ * whenever raster tiles cannot load — so a provider disappearing degrades
+ * the map rather than emptying it.
  */
 export const QATAR_CENTER = [25.3, 51.48]
 
@@ -23,33 +35,14 @@ export const MAP_OPTIONS = {
   maxBoundsViscosity: 0.8
 }
 
-const CARTO_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-
 const ESRI_ATTRIBUTION =
   'Imagery &copy; <a href="https://www.esri.com/">Esri</a> — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
-
-const carto = (style) => ({
-  url: `https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png`,
-  options: {
-    attribution: CARTO_ATTRIBUTION,
-    subdomains: 'abcd',
-    maxZoom: 20
-  }
-})
 
 const esri = (service, maxNativeZoom = 19) => ({
   url: `https://server.arcgisonline.com/ArcGIS/rest/services/${service}/MapServer/tile/{z}/{y}/{x}`,
   options: { attribution: ESRI_ATTRIBUTION, maxNativeZoom, maxZoom: 20 }
 })
 
-/**
- * Each style lists `sources` — ordered fallback chains. If a chain's base
- * layer can't load anything (blocked CDN, offline), the map tries the
- * next chain, and only after every chain fails does it drop to the
- * bundled vector chart. A chain is an array of stacked tile layers
- * (base first, optional label overlays after).
- */
 const osm = {
   url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
   options: {
@@ -59,6 +52,17 @@ const osm = {
     maxZoom: 20
   }
 }
+
+/**
+ * Each style lists `sources` — ordered fallback chains. If a chain's base
+ * layer can't load anything (blocked CDN, offline), the map tries the
+ * next chain, and only after every chain fails does it drop to the
+ * bundled vector chart. A chain is an array of stacked tile layers
+ * (base first, optional label overlays after).
+ *
+ * Two independent providers per style, deliberately. One of them going
+ * away is now a thing that has happened rather than a thing that might.
+ */
 
 /**
  * `filter` is a CSS filter applied to the tile layer only (markers and
@@ -72,24 +76,23 @@ export const BASEMAPS = {
     label: 'Streets',
     emoji: '🗺️',
     description: 'Colourful streets and places',
-    // Warms the land toward cream and pushes the water toward the
-    // turquoise of the Soft style, so the two don't clash
-    filter: 'saturate(1.35) hue-rotate(-6deg) contrast(1.04) brightness(1.03)',
-    sources: [[carto('rastertiles/voyager')], [osm]]
+    // Gentler than the filter CARTO's palette needed: Esri's street map is
+    // already saturated, and the old values turned it lurid
+    filter: 'saturate(1.08) contrast(1.02) brightness(1.02)',
+    sources: [[esri('World_Street_Map')], [osm]]
   },
   minimal: {
     swatch: 'linear-gradient(135deg, #f7f7f7 0%, #e6e8ea 55%, #cfd8dc 100%)',
     label: 'Minimal',
     emoji: '🤍',
     description: 'Clean and quiet — pins pop',
-    // Positron's sea is nearly grey (#D4DADE). Its land and roads are
-    // neutral, and saturating a neutral colour leaves it neutral — so a
-    // strong saturate turns the water blue (#B4E1F4, close to the Soft
-    // style's sea) while land stays near-white and roads stay white.
-    filter: 'saturate(6.5) hue-rotate(-9deg)',
+    // Esri's light canvas is near-neutral, and saturating a neutral colour
+    // leaves it neutral — so a strong saturate brings the sea up blue while
+    // land stays pale and roads stay white
+    filter: 'saturate(4.5) hue-rotate(-8deg)',
     sources: [
-      [carto('light_all')],
-      [esri('Canvas/World_Light_Gray_Base', 16), esri('Canvas/World_Light_Gray_Reference', 16)]
+      [esri('Canvas/World_Light_Gray_Base', 16), esri('Canvas/World_Light_Gray_Reference', 16)],
+      [osm]
     ]
   },
   satellite: {
@@ -111,3 +114,16 @@ export const BASEMAPS = {
 }
 
 export const DEFAULT_BASEMAP = 'soft'
+
+/** Every remote tile URL the app can ask for — scripts/check-tiles.js reads this. */
+export const ALL_TILE_SOURCES = Object.entries(BASEMAPS).flatMap(([style, cfg]) =>
+  (cfg.sources || []).flatMap((chain, chainIndex) =>
+    chain.map((layer, layerIndex) => ({
+      style,
+      chain: chainIndex,
+      layer: layerIndex,
+      url: layer.url
+    }))
+  )
+)
+
