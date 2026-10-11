@@ -59,6 +59,14 @@ const MUTATIONS = [
     shouldCatch: /cannot be switched afterwards/i
   },
   {
+    name: 'sign-up stops saying where the confirmation link should return to',
+    spec: 'launch',
+    file: 'src/stores/authStore.js',
+    find: '            emailRedirectTo: SITE_URL,',
+    replace: '',
+    shouldCatch: /where to send the member back|full path/i
+  },
+  {
     name: 'the confirmation-link handler stops claiming the session',
     spec: 'launch',
     file: 'src/services/supabaseClient.js',

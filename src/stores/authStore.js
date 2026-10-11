@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { supabase, isLive } from '@/services/supabaseClient'
+import { SITE_URL } from '@/config/site'
 import { toMember, upsertDemoMember } from '@/services/eventService'
 
 const SESSION_KEY = 'wyn:session'
@@ -236,8 +237,27 @@ export const useAuthStore = defineStore('auth', {
         const { data, error } = await supabase.auth.signUp({
           email: em,
           password,
-          // handle_new_user() copies both into the profile row (migration 013)
-          options: { data: { full_name: trimmedName, gender } }
+          options: {
+            /**
+             * Where the link in the confirmation email comes back to.
+             *
+             * Without this, Supabase falls back to the Site URL in its
+             * dashboard — a field nobody can see from the code and which
+             * is easy to leave half-edited. It was set to the bare domain,
+             * so every new member clicked their link and landed on
+             * GitHub's "There isn't a GitHub Pages site here" page. The
+             * app knows its own address; it should say so rather than hope.
+             *
+             * SITE_URL carries the full path, and it is the one line that
+             * changes when the custom domain arrives, so this follows it.
+             * Supabase only honours a redirect that matches the Redirect
+             * URLs allow-list — if it ever stops matching, this quietly
+             * falls back to Site URL rather than failing the sign-up.
+             */
+            emailRedirectTo: SITE_URL,
+            // handle_new_user() copies both into the profile row (migration 013)
+            data: { full_name: trimmedName, gender }
+          }
         })
         if (error) {
           throw new Error(

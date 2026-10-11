@@ -1,5 +1,6 @@
 import { phone } from '../lib/browser.js'
 import { suite } from '../lib/suite.js'
+import { SITE_URL } from '../../site.config.js'
 
 export const title = 'Launch readiness — the confirmation link, previews, and installing'
 
@@ -71,6 +72,77 @@ async function land(browser, live, path, { mockUser = false } = {}) {
 
 export default async function ({ browser, demo, live }) {
   const s = suite(title)
+
+  /* ------------------------------------- the link points somewhere real */
+  s.section('The link the email carries')
+
+  /**
+   * Where a confirmation link comes back to must be decided by the app,
+   * not by a field in a dashboard.
+   *
+   * It was left to Supabase's Site URL, which had lost its `/Party/` path,
+   * so the first real member clicked their link and landed on GitHub's
+   * "There isn't a GitHub Pages site here" page. The sign-up worked
+   * perfectly; the destination was wrong, and nothing in the repo could
+   * have told you.
+   */
+  const signup = await phone(browser)
+  let asked = null
+  await signup.route('**/auth/v1/signup*', (route) => {
+    asked = route.request().url()
+    // Answer as a project with confirmation switched on does: a user, no
+    // session, so the app shows "check your email"
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: '00000000-0000-4000-8000-000000000009',
+        email: 'brand-new@example.com',
+        role: 'authenticated',
+        confirmation_sent_at: new Date().toISOString()
+      })
+    })
+  })
+
+  await signup.goto(live, { waitUntil: 'domcontentloaded' })
+  await signup.waitForSelector('.map-view__fab', { timeout: 15000 })
+  await signup.waitForTimeout(500)
+  await signup.click('.map-view__fab')
+  await signup.waitForSelector('.map-view__login', { timeout: 8000 })
+  await signup.click('.map-view__login .login-panel__switch')
+  await signup.fill('.map-view__login #auth-name', 'Brand New')
+  await signup.fill('.map-view__login #auth-email', 'brand-new@example.com')
+  await signup.fill('.map-view__login #auth-password', 'secret123')
+  await signup.click('.map-view__login .login-panel__gender-btn:nth-child(1)')
+  await signup.click('.map-view__login .login-panel__submit')
+  await signup.waitForTimeout(900)
+
+  s.check('signing up reaches the backend at all', !!asked, 'no sign-up request was made')
+
+  const redirect = asked && new URL(asked).searchParams.get('redirect_to')
+  s.check(
+    'and tells it exactly where to send the member back',
+    !!redirect,
+    'no redirect_to on the sign-up — the destination falls back to a dashboard field nobody can see from here'
+  )
+  s.check(
+    'with the full path, not just the domain',
+    !!redirect && new URL(redirect).pathname.length > 1,
+    `redirect_to is ${redirect} — a bare domain lands on GitHub's "no site here" page`
+  )
+  s.check(
+    'matching the address the app is built with',
+    redirect === SITE_URL,
+    `the email would return to ${redirect}, but the app is served from ${SITE_URL}`
+  )
+
+  const told = await signup.textContent('.login-panel__notice').catch(() => null)
+  s.check(
+    'and the member is told to go and look in their inbox',
+    /email|confirm/i.test(told || ''),
+    `the screen said ${JSON.stringify(told)}`
+  )
+  await signup.context().close()
 
   /* -------------------------------------- the link in the email works -- */
   s.section('Clicking the link in the confirmation email')
