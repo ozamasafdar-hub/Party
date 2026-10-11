@@ -63,9 +63,46 @@ async function fetchTile(url) {
     status: res.status,
     type: res.headers.get('content-type') || '',
     bytes: body.length,
+    image: imageShape(body),
     // Cheap fingerprint: enough to tell two pictures apart
     fingerprint: `${body.length}:${body.subarray(0, 64).toString('hex')}`
   }
+}
+
+/**
+ * Is this really a 256-pixel map tile?
+ *
+ * Size is not the test. The first version of this refused anything under
+ * 300 bytes and immediately failed a perfectly good OpenStreetMap tile of
+ * open sea — 103 bytes, because a solid blue square compresses to almost
+ * nothing. Esri does the same over empty desert. A featureless tile being
+ * tiny is the format working, not the provider failing.
+ *
+ * So read the header instead: PNG carries its dimensions in the IHDR
+ * chunk, JPEG in its SOFn marker. A real tile is 256×256, or 512 if the
+ * provider served a retina one.
+ */
+function imageShape(body) {
+  // PNG: 8-byte signature, then IHDR with width and height as big-endian
+  if (body.length > 24 && body.subarray(0, 8).toString('hex') === '89504e470d0a1a0a') {
+    return { kind: 'png', width: body.readUInt32BE(16), height: body.readUInt32BE(20) }
+  }
+  // JPEG: walk the markers to the frame header that carries the size
+  if (body.length > 4 && body[0] === 0xff && body[1] === 0xd8) {
+    let i = 2
+    while (i + 9 < body.length) {
+      if (body[i] !== 0xff) break
+      const marker = body[i + 1]
+      const length = body.readUInt16BE(i + 2)
+      // SOF0..SOF15, skipping the four that are not frame headers
+      if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+        return { kind: 'jpeg', height: body.readUInt16BE(i + 5), width: body.readUInt16BE(i + 7) }
+      }
+      i += 2 + length
+    }
+    return { kind: 'jpeg', width: 0, height: 0 }
+  }
+  return null
 }
 
 async function checkSource(source) {
@@ -86,30 +123,57 @@ async function checkSource(source) {
     }
   }
 
-  const prints = new Set(results.map((r) => r.fingerprint))
-  if (prints.size === 1) {
+  const notAnImage = results.find((r) => !r.image)
+  if (notAnImage) {
     return {
       state: 'broken',
-      why:
-        `all three tiles are byte-identical (${results[0].bytes}B) — city, sea and ` +
-        'desert cannot look the same, so this is a placeholder, not a map'
+      why: `${notAnImage.probe.name} is not a PNG or JPEG at all (${notAnImage.bytes}B)`
     }
   }
 
-  const tiny = results.find((r) => r.bytes < 300)
-  if (tiny) {
-    return { state: 'broken', why: `${tiny.probe.name} is only ${tiny.bytes}B — too small to be a tile` }
+  const wrongSize = results.find((r) => ![256, 512].includes(r.image.width))
+  if (wrongSize) {
+    return {
+      state: 'broken',
+      why: `${wrongSize.probe.name} is ${wrongSize.image.width}×${wrongSize.image.height}, not a 256px tile`
+    }
   }
 
-  return { state: 'ok', why: results.map((r) => `${r.bytes}B`).join(' / ') }
+  /**
+   * The watermark test, and the reason this script exists.
+   *
+   * Only for a chain's BASE layer. A labels overlay is legitimately blank
+   * over sea and over empty desert — identical tiles there mean the
+   * cartography is right, not that the provider is stalling.
+   */
+  if (source.layer === 0) {
+    const prints = new Set(results.map((r) => r.fingerprint))
+    if (prints.size === 1) {
+      return {
+        state: 'broken',
+        why:
+          `all three tiles are byte-identical (${results[0].bytes}B) — city, sea and ` +
+          'desert cannot look the same, so this is a placeholder, not a map'
+      }
+    }
+  }
+
+  return {
+    state: 'ok',
+    why: results.map((r) => `${r.probe.name} ${r.bytes}B`).join(', ')
+  }
 }
 
 async function main() {
-  // One source can appear under several styles; check each URL once
+  // One source can appear under several styles; check each URL once, and
+  // remember whether it is ever used as a chain's base layer — the
+  // watermark test only applies to those
   const seen = new Map()
   for (const s of ALL_TILE_SOURCES) {
-    if (!seen.has(s.url)) seen.set(s.url, [])
-    seen.get(s.url).push(s.style)
+    if (!seen.has(s.url)) seen.set(s.url, { styles: [], layer: s.layer })
+    const entry = seen.get(s.url)
+    entry.styles.push(s.style)
+    entry.layer = Math.min(entry.layer, s.layer)
   }
 
   console.log(`checking ${seen.size} tile sources across ${PROBES.length} places in Qatar\n`)
@@ -117,10 +181,11 @@ async function main() {
   const broken = []
   const unreachable = []
 
-  for (const [url, styles] of seen) {
+  for (const [url, { styles, layer }] of seen) {
     const host = new URL(url.replace('{s}', 'a')).host
-    const result = await checkSource({ url })
-    const label = `${host}  (${[...new Set(styles)].join(', ')})`
+    const result = await checkSource({ url, layer })
+    const role = layer === 0 ? '' : ' — labels overlay'
+    const label = `${host}  (${[...new Set(styles)].join(', ')}${role})`
 
     if (result.state === 'ok') console.log(`  ✓ ${label}\n      ${result.why}`)
     else if (result.state === 'unreachable') {
