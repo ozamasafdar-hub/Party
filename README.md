@@ -171,6 +171,26 @@ domain), and zone/neighbourhood/locality boundaries from
 [Who's On First](https://whosonfirst.org) (CC0/CC BY). Raster tiles are
 © OpenStreetMap contributors, style © CARTO.
 
+## 🧪 Tests
+
+```sh
+npm test                         # browser specs, both builds
+bash docs/sql-tests/run.sh       # the database rules, on a real Postgres
+node tests/negative-control.js   # prove the suite can still fail
+```
+
+Two halves, because the rules live in two places. The browser specs in
+[`tests/`](tests/README.md) cover what a member can see and do. The SQL
+harness in [`docs/sql-tests/`](docs/sql-tests/) builds a throwaway Postgres
+from the real schema and asserts the rules that only exist in the database
+— the capacity trigger, the ladies-only gate, what survives a member
+deleting their account.
+
+Every spec guards a bug that actually happened; `tests/README.md` lists
+which. The negative control is the one to run when you doubt any of it: it
+breaks ten real protections one at a time and checks that something
+notices.
+
 ## 🔌 Going live with Supabase
 
 The Supabase integration is already built in — the app auto-detects it.

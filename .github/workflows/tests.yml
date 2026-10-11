@@ -1,0 +1,38 @@
+name: Tests
+
+# Runs on every push and every pull request, and deliberately does NOT gate
+# the Pages deploy — those live in deploy-pages.yml and run in parallel.
+#
+# That is a choice, not an oversight: this suite drives a real browser, and
+# a browser suite that has never run on a runner before should not be able
+# to stop a launch on its first bad day. Once it has a few green weeks
+# behind it, move the `build` job of deploy-pages.yml behind `needs: test`
+# and it becomes a real gate.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      # playwright-core ships without a browser, on purpose — it keeps
+      # `npm install` small. Its own CLI fetches the matching build, so the
+      # browser revision can never drift from the library version.
+      - run: node node_modules/playwright-core/cli.js install --with-deps chromium
+
+      - run: npm test
+
+      # Proves the suite can still fail. A green run means nothing on its
+      # own: this breaks ten real protections one at a time and checks that
+      # something notices each one.
+      - run: node tests/negative-control.js
