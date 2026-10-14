@@ -43,6 +43,33 @@ const MUTATIONS = [
     shouldCatch: /free member cannot join/i
   },
   {
+    name: 'capacity goes back to counting members instead of people',
+    spec: 'seats',
+    file: 'src/utils/seats.js',
+    find: '  return event.attendeeIds.reduce((sum, id) => sum + seatsOf(event, id), 0)',
+    replace: '  return event.attendeeIds.length',
+    shouldCatch: /four places are taken|shows people, not members/i
+  },
+  {
+    name: 'the demo backend stops counting a party against capacity',
+    spec: 'seats',
+    file: 'src/services/eventService.js',
+    find: '    if (demoPeopleGoing(event) - mine + seats > event.maxCapacity) {',
+    replace: '    if (false) {',
+    shouldCatch: /bypassed entirely|never oversold|squeeze into four places/i
+  },
+  {
+    name: 'women-only events start accepting unchecked guests',
+    spec: 'seats',
+    file: 'src/services/eventService.js',
+    find:
+      '  if (event.ladiesOnly && seats > 1) {\n' +
+      "    throw friendly(new Error('LADIES_ONLY_SEATS'))\n" +
+      '  }',
+    replace: '  if (false) { throw new Error(0) }',
+    shouldCatch: /rule holds even when the control is bypassed|a member would understand/i
+  },
+  {
     name: 'a host is allowed to walk away from their own event',
     spec: 'gates',
     file: 'src/services/eventService.js',

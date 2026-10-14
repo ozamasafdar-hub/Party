@@ -15,6 +15,7 @@ import { formatWhen, hasEnded, inMemoryWindow, memoryHoursLeft } from '@/utils/d
 import MemberAvatar from '@/components/ui/MemberAvatar.vue'
 import EditProfileModal from '@/components/profile/EditProfileModal.vue'
 import HostProModal from '@/components/pro/HostProModal.vue'
+import { peopleGoing } from '@/utils/seats'
 
 const route = useRoute()
 const router = useRouter()
@@ -289,7 +290,7 @@ function logout() {
               <span class="profile__event-meta">
                 {{ event.locationName }} · {{ formatWhen(event.startsAt) }}
                 <template v-if="!group.past">
-                  · {{ event.attendeeIds.length }}/{{ event.maxCapacity }} going
+                  · {{ peopleGoing(event) }}/{{ event.maxCapacity }} going
                 </template>
               </span>
             </span>

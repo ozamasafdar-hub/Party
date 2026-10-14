@@ -12,6 +12,7 @@ import { useFollowStore } from '@/stores/followStore'
 import { categoryOf, pinColorOf } from '@/config/categories'
 import { formatWhen, formatDay, isLive } from '@/utils/datetime'
 import { distanceKm, formatDistance } from '@/utils/geo'
+import { peopleGoing, isFull } from '@/utils/seats'
 
 const emit = defineEmits(['close', 'select', 'need-location'])
 
@@ -68,12 +69,12 @@ const grouped = computed(() => {
 const RING_CIRC = 2 * Math.PI * 15.5
 
 function ringDash(event) {
-  const pct = Math.min(1, event.attendeeIds.length / event.maxCapacity)
+  const pct = Math.min(1, peopleGoing(event) / event.maxCapacity)
   return `${RING_CIRC * pct} ${RING_CIRC}`
 }
 
 function ringColor(event) {
-  return event.attendeeIds.length >= event.maxCapacity
+  return isFull(event)
     ? 'var(--danger)'
     : 'var(--success)'
 }
@@ -189,7 +190,7 @@ function hideBrokenImage(event) {
             transform="rotate(-90 20 20)"
           />
           <text x="20" y="23.4" text-anchor="middle" class="event-list__ring-text">
-            {{ event.attendeeIds.length }}/{{ event.maxCapacity }}
+            {{ peopleGoing(event) }}/{{ event.maxCapacity }}
           </text>
         </svg>
       </button>

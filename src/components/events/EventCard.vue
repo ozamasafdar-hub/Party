@@ -28,6 +28,7 @@ import CheckoutModal from '@/components/events/CheckoutModal.vue'
 import HostRequestsPanel from '@/components/events/HostRequestsPanel.vue'
 import HostProModal from '@/components/pro/HostProModal.vue'
 import { useHostPermissions } from '@/composables/useHostPermissions'
+import { peopleGoing, seatsOf, maxSeatsFor, canBringGuests, fits } from '@/utils/seats'
 
 const props = defineProps({
   event: { type: Object, required: true },
@@ -152,12 +153,44 @@ async function toggleFollowHost() {
   }
 }
 
+/**
+ * How many places to book.
+ *
+ * Defaults to the party already held, so reopening the card shows what you
+ * booked rather than resetting you to one and quietly shrinking your family
+ * if you tap Going twice.
+ */
+const seats = ref(seatsOf(props.event, authStore.currentUser?.id))
+
+/** The ceiling: the ten-place rule, or whatever is actually left. */
+const seatCeiling = computed(() => maxSeatsFor(props.event, meId.value))
+
+/**
+ * Hidden on women-only events, where the answer is always one. Showing a
+ * stepper that refuses to move past 1 invites the question "why?" at the
+ * exact moment somebody is trying to join; the note beside it answers it
+ * once instead.
+ */
+const canPickSeats = computed(
+  () => canBringGuests(props.event) && !isAttending.value && !ended.value && seatCeiling.value > 1
+)
+
+function setSeats(n) {
+  seats.value = Math.max(1, Math.min(seatCeiling.value, n))
+}
+
+const priceTotal = computed(() => Number(props.event.pricePerSpot) * seats.value)
+
 const joinLabel = computed(() => {
+  const places = seats.value > 1 ? ` · ${seats.value} places` : ''
   if (props.event.approvalMode) {
-    return isPaid.value ? `🙋 Request to join · QAR ${priceAmount.value}` : '🙋 Request to join'
+    return isPaid.value
+      ? `🙋 Request to join · QAR ${priceTotal.value}`
+      : `🙋 Request to join${places}`
   }
-  if (full.value) return 'Join waitlist'
-  return isPaid.value ? `Reserve spot · QAR ${priceAmount.value}` : 'Join · RSVP'
+  if (!fits(props.event, seats.value)) return `Join waitlist${places}`
+  if (isPaid.value) return `Reserve ${seats.value > 1 ? seats.value + ' spots' : 'spot'} · QAR ${priceTotal.value}`
+  return seats.value > 1 ? `Join · ${seats.value} places` : 'Join · RSVP'
 })
 
 /* --- blurred location ----------------------------------------------------- */
@@ -207,7 +240,7 @@ function resolveMember(id) {
 const guests = computed(() => props.event.attendeeIds.map(resolveMember))
 
 const capacityPct = computed(() =>
-  Math.min(100, (props.event.attendeeIds.length / props.event.maxCapacity) * 100)
+  Math.min(100, (peopleGoing(props.event) / props.event.maxCapacity) * 100)
 )
 
 const shareUrl = computed(
@@ -274,7 +307,7 @@ async function toggleRsvp() {
       // Paid events go through the (simulated) escrow checkout first
       showCheckout.value = true
     } else {
-      await eventStore.smartJoin(props.event.id, meId.value)
+      await eventStore.smartJoin(props.event.id, meId.value, seats.value)
     }
   } catch (e) {
     error.value = e.message
@@ -552,7 +585,7 @@ onBeforeUnmount(() => chatStore.close())
 
     <section class="event-card__guestlist">
       <div class="event-card__guestlist-head">
-        <span>Guestlist · {{ event.attendeeIds.length }}/{{ event.maxCapacity }}</span>
+        <span>Guestlist · {{ peopleGoing(event) }}/{{ event.maxCapacity }}</span>
         <span :class="['event-card__spots', { 'event-card__spots--full': full }]">
           <template v-if="full">
             Full{{ event.waitlistIds?.length ? ` · ${event.waitlistIds.length} waiting` : '' }}
@@ -648,13 +681,37 @@ onBeforeUnmount(() => chatStore.close())
         <p v-if="isAttending && spotGuaranteed" class="event-card__guaranteed">
           💳 Spot guaranteed — payment held in escrow
         </p>
+        <!-- Bringing people with you. Hidden where the answer can only be
+             one, and explained rather than greyed out on women-only events. -->
+        <div v-if="canPickSeats" class="event-card__seats">
+          <span class="event-card__seats-label">How many of you?</span>
+          <div class="event-card__stepper">
+            <button
+              class="event-card__step"
+              aria-label="One fewer place"
+              :disabled="seats <= 1"
+              @click="setSeats(seats - 1)"
+            >−</button>
+            <span class="event-card__seats-count" aria-live="polite">{{ seats }}</span>
+            <button
+              class="event-card__step"
+              aria-label="One more place"
+              :disabled="seats >= seatCeiling"
+              @click="setSeats(seats + 1)"
+            >+</button>
+          </div>
+        </div>
+        <p v-else-if="!isAttending && !ended && event.ladiesOnly" class="event-card__seats-note">
+          One place per member — ask your friends to join in their own names.
+        </p>
+
         <button
           v-if="isAttending"
           class="btn-primary event-card__join"
           :disabled="busy"
           @click="toggleRsvp"
         >
-          ✓ Going — tap to cancel
+          ✓ Going{{ seatsOf(event, meId) > 1 ? ` · ${seatsOf(event, meId)} places` : '' }} — tap to cancel
         </button>
         <button
           v-else-if="isRequested"
@@ -773,6 +830,7 @@ onBeforeUnmount(() => chatStore.close())
   </article>
 
   <CheckoutModal
+      :seats="seats"
     v-if="showCheckout"
     :event="event"
     @close="showCheckout = false"
@@ -1312,6 +1370,70 @@ onBeforeUnmount(() => chatStore.close())
 
 .event-card__actions {
   margin-top: 18px;
+}
+
+.event-card__seats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 8px 10px 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+}
+
+.event-card__seats-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.event-card__stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 36px rather than the 44 a tap target usually wants: these sit in a row
+   inside a pill, and a pair of 44s makes the control taller than the join
+   button underneath it. The hit area is padded out by the pill itself. */
+.event-card__step {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-subtle);
+}
+
+.event-card__step:disabled {
+  opacity: 0.35;
+}
+
+@media (hover: hover) {
+  .event-card__step:not(:disabled):hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
+}
+
+.event-card__seats-count {
+  min-width: 28px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.event-card__seats-note {
+  margin-bottom: 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
 }
 
 .event-card__join {

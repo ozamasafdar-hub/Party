@@ -9,7 +9,11 @@ import { useEventStore } from '@/stores/eventStore'
 import { useAuthStore } from '@/stores/authStore'
 
 const props = defineProps({
-  event: { type: Object, required: true }
+  event: { type: Object, required: true },
+  // How many places the member chose on the card. The line items below
+  // show the arithmetic rather than one number, because "QAR 600" with no
+  // explanation is how a four-ticket booking turns into a complaint.
+  seats: { type: Number, default: 1 }
 })
 
 const emit = defineEmits(['close', 'paid'])
@@ -19,13 +23,19 @@ const authStore = useAuthStore()
 const busy = ref(false)
 const error = ref('')
 
-const amount = computed(() => Number(props.event.pricePerSpot).toFixed(0))
+const unitPrice = computed(() => Number(props.event.pricePerSpot))
+const amount = computed(() => (unitPrice.value * props.seats).toFixed(0))
 
 async function pay() {
   busy.value = true
   error.value = ''
   try {
-    await eventStore.payAndJoin(props.event.id, authStore.currentUser.id, Number(amount.value))
+    await eventStore.payAndJoin(
+      props.event.id,
+      authStore.currentUser.id,
+      Number(amount.value),
+      props.seats
+    )
     emit('paid')
   } catch (e) {
     error.value = e.message
@@ -38,13 +48,19 @@ async function pay() {
 <template>
   <div class="modal-backdrop" @click.self="emit('close')">
     <div class="checkout glass-panel">
-      <h2 class="checkout__title">Reserve your spot</h2>
+      <h2 class="checkout__title">
+        {{ seats > 1 ? `Reserve ${seats} spots` : 'Reserve your spot' }}
+      </h2>
       <p class="checkout__event">{{ event.title }}</p>
 
       <div class="checkout__summary">
         <div class="checkout__row">
           <span>Spot price</span>
-          <span>QAR {{ amount }}</span>
+          <span>QAR {{ unitPrice }}</span>
+        </div>
+        <div v-if="seats > 1" class="checkout__row">
+          <span>Places</span>
+          <span>× {{ seats }}</span>
         </div>
         <div class="checkout__row">
           <span>WYN fee</span>

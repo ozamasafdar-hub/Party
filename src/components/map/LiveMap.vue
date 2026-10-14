@@ -23,6 +23,7 @@ import { addVectorBasemap } from './vectorBasemap'
 import { isLive, formatWhen, memoryHoursLeft } from '@/utils/datetime'
 import { useEventStore } from '@/stores/eventStore'
 import { useFollowStore } from '@/stores/followStore'
+import { peopleGoing, isFull } from '@/utils/seats'
 
 const eventStore = useEventStore()
 const followStore = useFollowStore()
@@ -139,7 +140,7 @@ function applyHeat() {
   const points = props.events.map((e) => [
     e.lat,
     e.lng,
-    Math.max(0.4, e.attendeeIds.length / e.maxCapacity)
+    Math.max(0.4, peopleGoing(e) / e.maxCapacity)
   ])
   heatLayer = L.heatLayer(points, {
     radius: 38,
@@ -175,7 +176,7 @@ function renderMarkers(events) {
     seen.add(event.id)
     const state = {
       live: isLive(event),
-      full: event.attendeeIds.length >= event.maxCapacity,
+      full: isFull(event),
       selected: event.id === props.selectedId,
       friend: followStore.isFriendEvent(event)
     }
@@ -212,7 +213,7 @@ function renderMarkers(events) {
       // Only rebuild the icon when something it displays actually changed
       const signature = JSON.stringify([
         state,
-        event.attendeeIds.length,
+        peopleGoing(event),
         event.category,
         event.featuredPin,
         event.ladiesOnly,

@@ -132,6 +132,24 @@ function demoTierOf(userId) {
   return db.members.find((m) => m.id === userId)?.subscriptionTier ?? 'free'
 }
 
+/**
+ * Seats, in the demo backend.
+ *
+ * `event.seats` maps a member id to their party size. Absent means one, so
+ * every seeded event and every RSVP made before this feature existed still
+ * means exactly what it always did. Mirrors src/utils/seats.js, which the
+ * views use — the arithmetic has to agree on both sides of the service
+ * boundary or the button and the rule disagree.
+ */
+function demoSeatsOf(event, userId) {
+  const n = event?.seats?.[userId]
+  return Number.isInteger(n) && n > 0 ? n : 1
+}
+
+function demoPeopleGoing(event) {
+  return event.attendeeIds.reduce((sum, id) => sum + demoSeatsOf(event, id), 0)
+}
+
 /** Pro-only events: only Host Pro members may join or request. */
 function demoGateProOnly(event, userId) {
   if (event.proOnly && event.hostId !== userId && demoTierOf(userId) !== 'host_pro') {
@@ -145,7 +163,13 @@ function demoGateProOnly(event, userId) {
  * toggle, or a poked console all reach this function with the UI bypassed.
  * Live mode enforces the same two rules in the capacity trigger.
  */
-function demoGateJoinable(event, userId) {
+function demoGateJoinable(event, userId, seats = 1) {
+  // The seat rule binds the host too: the promise is about who ends up in
+  // the room, and a guest is someone nobody has checked. Same reasoning,
+  // and the same wording, as migration 015.
+  if (event.ladiesOnly && seats > 1) {
+    throw friendly(new Error('LADIES_ONLY_SEATS'))
+  }
   if (event.hostId === userId) return
   if (event.ladiesOnly && db.members.find((m) => m.id === userId)?.gender !== 'female') {
     throw friendly(new Error('LADIES_ONLY'))
@@ -247,13 +271,28 @@ function demoFind(eventId) {
   return event
 }
 
-/** When a "going" spot frees up, the longest-waiting member gets it. */
+/**
+ * When places free up, the longest-waiting party that FITS gets them.
+ *
+ * Skipping over a party too big for the gap is the same rule the database
+ * uses (migration 015) and the same one every box office uses: holding
+ * places empty for a group of five that may never be completed serves
+ * nobody. It does mean a single can get in ahead of a family who waited
+ * longer, which is unfair and is still the right call.
+ */
 function demoPromote(event) {
-  while (
-    event.waitlistIds.length &&
-    event.attendeeIds.length < event.maxCapacity
-  ) {
-    event.attendeeIds.push(event.waitlistIds.shift())
+  let moved = true
+  while (moved) {
+    moved = false
+    for (let i = 0; i < event.waitlistIds.length; i++) {
+      const id = event.waitlistIds[i]
+      if (demoPeopleGoing(event) + demoSeatsOf(event, id) <= event.maxCapacity) {
+        event.waitlistIds.splice(i, 1)
+        event.attendeeIds.push(id)
+        moved = true
+        break
+      }
+    }
   }
 }
 
@@ -337,14 +376,22 @@ const demo = {
     emit({ type: 'SYNC', events: await demo.listEvents() })
   },
 
-  async joinEvent(eventId, userId) {
+  async joinEvent(eventId, userId, seats = 1) {
     const event = demoFind(eventId)
-    if (event.attendeeIds.includes(userId)) return clone(event)
     demoGateReliability(event, userId)
     demoGateProOnly(event, userId)
-    demoGateJoinable(event, userId)
-    if (event.attendeeIds.length >= event.maxCapacity) {
-      throw new Error('This event is already full')
+    demoGateJoinable(event, userId, seats)
+
+    // Changing an existing booking asks only for the difference, so a party
+    // of four becoming five needs one free place rather than five
+    const mine = event.attendeeIds.includes(userId) ? demoSeatsOf(event, userId) : 0
+    if (demoPeopleGoing(event) - mine + seats > event.maxCapacity) {
+      throw friendly(new Error('EVENT_FULL'))
+    }
+    event.seats = { ...(event.seats || {}), [userId]: seats }
+    if (event.attendeeIds.includes(userId)) {
+      emit({ type: 'UPDATE', event: clone(event) })
+      return clone(event)
     }
     event.waitlistIds = event.waitlistIds.filter((id) => id !== userId)
     event.requestedIds = event.requestedIds.filter((id) => id !== userId)
@@ -356,14 +403,18 @@ const demo = {
     return clone(event)
   },
 
-  async requestJoin(eventId, userId) {
+  async requestJoin(eventId, userId, seats = 1) {
     const event = demoFind(eventId)
-    if (event.attendeeIds.includes(userId) || event.requestedIds.includes(userId)) {
-      return clone(event)
-    }
     demoGateReliability(event, userId)
     demoGateProOnly(event, userId)
-    demoGateJoinable(event, userId)
+    demoGateJoinable(event, userId, seats)
+    // The party size travels with the request, so approving it later knows
+    // how many places to find
+    event.seats = { ...(event.seats || {}), [userId]: seats }
+    if (event.attendeeIds.includes(userId) || event.requestedIds.includes(userId)) {
+      emit({ type: 'UPDATE', event: clone(event) })
+      return clone(event)
+    }
     event.requestedIds.push(userId)
     emit({ type: 'UPDATE', event: clone(event) })
     return clone(event)
@@ -372,8 +423,8 @@ const demo = {
   async approveRequest(eventId, userId) {
     const event = demoFind(eventId)
     if (!event.requestedIds.includes(userId)) return clone(event)
-    if (event.attendeeIds.length >= event.maxCapacity) {
-      throw new Error('This event is already full')
+    if (demoPeopleGoing(event) + demoSeatsOf(event, userId) > event.maxCapacity) {
+      throw friendly(new Error('EVENT_FULL'))
     }
     event.requestedIds = event.requestedIds.filter((id) => id !== userId)
     event.attendeeIds.push(userId)
@@ -392,8 +443,10 @@ const demo = {
     return clone(event)
   },
 
-  async joinWaitlist(eventId, userId) {
+  async joinWaitlist(eventId, userId, seats = 1) {
     const event = demoFind(eventId)
+    demoGateJoinable(event, userId, seats)
+    event.seats = { ...(event.seats || {}), [userId]: seats }
     if (event.attendeeIds.includes(userId) || event.waitlistIds.includes(userId)) {
       return clone(event)
     }
@@ -756,6 +809,18 @@ function toEvent(row) {
     attendeeIds: byStatus('going'),
     waitlistIds: byStatus('waitlist'),
     requestedIds: byStatus('requested'),
+    /**
+     * Party sizes, keyed by member.
+     *
+     * Only members bringing more than themselves are listed; everyone else
+     * means one, which is what every row written before migration 015 says
+     * by default. An un-migrated database has no seats column at all, and
+     * then this is simply empty and every booking counts as one — the same
+     * answer the app gave before any of this existed.
+     */
+    seats: Object.fromEntries(
+      rsvps.filter((r) => (r.seats ?? 1) > 1).map((r) => [r.user_id, r.seats])
+    ),
     payments: Object.fromEntries(
       (row.rsvp_payments || []).map((p) => [
         p.user_id,
@@ -789,7 +854,34 @@ function toDm(row) {
 const DM_TABLES = /dm_threads|dm_messages|dm_reads|dm_blocks|dm_inbox|open_dm_thread/
 
 function friendly(error) {
-  if (/EVENT_FULL/.test(error.message)) return new Error('This event is already full')
+  // Order matters below: LADIES_ONLY_SEATS and BAD_SEATS are checked before
+  // the looser patterns that would also match them and answer the wrong
+  // question — /LADIES_ONLY/ matches LADIES_ONLY_SEATS perfectly well.
+  if (/LADIES_ONLY_SEATS/.test(error.message)) {
+    return new Error(
+      'Women-only events are one place per member — ask your friends to join in their own names'
+    )
+  }
+  if (/BAD_SEATS/.test(error.message)) {
+    return new Error('Choose between 1 and 10 places')
+  }
+  if (/NOT_SIGNED_IN/.test(error.message)) {
+    return new Error('Sign in to book a place')
+  }
+  if (/EVENT_FULL/.test(error.message)) {
+    // The database says how many are left; "already full" throws that away,
+    // and how many are left is exactly what you want to know when you have
+    // just asked for four
+    const left = error.message.match(/only (\d+) of (\d+)/)
+    if (left) {
+      return new Error(
+        left[1] === '0'
+          ? 'This event is already full'
+          : `Only ${left[1]} place${left[1] === '1' ? '' : 's'} left — try a smaller party`
+      )
+    }
+    return new Error('This event is already full')
+  }
   if (/RELIABILITY_TOO_LOW/.test(error.message)) {
     return new Error('This host requires a higher attendance record to join')
   }
@@ -841,8 +933,17 @@ async function uploadCover(userId, coverDataUrl) {
   return supabase.storage.from('covers').getPublicUrl(path).data.publicUrl
 }
 
-const EVENT_SELECT =
-  '*, rsvps(user_id, status, created_at), rsvp_payments(user_id, status, amount)'
+/**
+ * `rsvps(*)` rather than a column list, deliberately.
+ *
+ * Naming `seats` explicitly would fail the entire query on a database that
+ * has not run migration 015 yet — not degrade, fail — and take every event
+ * on the map with it. A star returns whichever columns exist, so the app
+ * works before and after the migration and toEvent() simply finds no seats
+ * until there are some. The row is five small columns; the extra one costs
+ * nothing.
+ */
+const EVENT_SELECT = '*, rsvps(*), rsvp_payments(user_id, status, amount)'
 
 /**
  * Columns added by later migrations. A database that hasn't run them yet
@@ -989,26 +1090,36 @@ const live = {
     if (error) throw friendly(error)
   },
 
-  async joinEvent(eventId, userId) {
+  async joinEvent(eventId, userId, seats = 1) {
+    const { error } = await supabase
+      .rpc('book_seats', { p_event_id: eventId, p_seats: seats })
+    if (error) {
+      // Before migration 015 there is no book_seats; fall back to the plain
+      // upsert so an un-migrated database still takes single bookings
+      if (/book_seats/.test(error.message)) {
+        const { error: plain } = await supabase
+          .from('rsvps')
+          .upsert({ event_id: eventId, user_id: userId, status: 'going' })
+        if (plain) throw friendly(plain)
+        return live.fetchEvent(eventId)
+      }
+      throw friendly(error)
+    }
+    return live.fetchEvent(eventId)
+  },
+
+  async joinWaitlist(eventId, userId, seats = 1) {
     const { error } = await supabase
       .from('rsvps')
-      .upsert({ event_id: eventId, user_id: userId, status: 'going' })
+      .upsert({ event_id: eventId, user_id: userId, status: 'waitlist', seats })
     if (error) throw friendly(error)
     return live.fetchEvent(eventId)
   },
 
-  async joinWaitlist(eventId, userId) {
+  async requestJoin(eventId, userId, seats = 1) {
     const { error } = await supabase
       .from('rsvps')
-      .upsert({ event_id: eventId, user_id: userId, status: 'waitlist' })
-    if (error) throw friendly(error)
-    return live.fetchEvent(eventId)
-  },
-
-  async requestJoin(eventId, userId) {
-    const { error } = await supabase
-      .from('rsvps')
-      .upsert({ event_id: eventId, user_id: userId, status: 'requested' })
+      .upsert({ event_id: eventId, user_id: userId, status: 'requested', seats })
     if (error) throw friendly(error)
     return live.fetchEvent(eventId)
   },

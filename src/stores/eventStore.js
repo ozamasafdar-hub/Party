@@ -30,6 +30,7 @@ import {
 import { useNotifStore } from './notifStore'
 import { useAuthStore } from './authStore'
 import { useFollowStore } from './followStore'
+import { spotsLeft, isFull, fits } from '@/utils/seats'
 
 export const useEventStore = defineStore('events', {
   state: () => ({
@@ -113,11 +114,11 @@ export const useEventStore = defineStore('events', {
     },
 
     spotsLeft() {
-      return (event) => Math.max(0, event.maxCapacity - event.attendeeIds.length)
+      return (event) => spotsLeft(event)
     },
 
     isFull() {
-      return (event) => event.attendeeIds.length >= event.maxCapacity
+      return (event) => isFull(event)
     },
 
     isWaitlisted() {
@@ -283,18 +284,24 @@ export const useEventStore = defineStore('events', {
     },
 
     /** RSVP — service rejects when full, which auto-closes the guestlist. */
-    async rsvp(eventId, userId) {
-      const event = await joinEvent(eventId, userId)
+    async rsvp(eventId, userId, seats = 1) {
+      const event = await joinEvent(eventId, userId, seats)
       const i = this.events.findIndex((e) => e.id === event.id)
       if (i !== -1) this.events.splice(i, 1, event)
       const notifStore = useNotifStore()
-      notifStore.flash(`🎉 You're in — see you at "${event.title}"!`)
-      notifStore.push(`You joined "${event.title}"`, event.id)
+      const party = seats > 1 ? ` — ${seats} places held` : ''
+      notifStore.flash(`🎉 You're in — see you at "${event.title}"!${party}`)
+      notifStore.push(
+        seats > 1
+          ? `You booked ${seats} places at "${event.title}"`
+          : `You joined "${event.title}"`,
+        event.id
+      )
       return event
     },
 
-    async joinWaitlist(eventId, userId) {
-      const event = await joinWaitlist(eventId, userId)
+    async joinWaitlist(eventId, userId, seats = 1) {
+      const event = await joinWaitlist(eventId, userId, seats)
       const i = this.events.findIndex((e) => e.id === event.id)
       if (i !== -1) this.events.splice(i, 1, event)
       const pos = (event.waitlistIds || []).indexOf(userId) + 1
@@ -304,18 +311,24 @@ export const useEventStore = defineStore('events', {
       return event
     },
 
-    /** Request / join / waitlist — whichever the event calls for. */
-    async smartJoin(eventId, userId) {
+    /**
+     * Request / join / waitlist — whichever the event calls for.
+     *
+     * A party that doesn't fit waitlists whole rather than splitting: half a
+     * family is not an outing, and letting two in while two queue is worse
+     * than telling all four to wait. Same rule as book_seats in the database.
+     */
+    async smartJoin(eventId, userId, seats = 1) {
       const event = this.events.find((e) => e.id === eventId)
-      if (event?.approvalMode) return this.requestJoin(eventId, userId)
-      if (event && event.attendeeIds.length >= event.maxCapacity) {
-        return this.joinWaitlist(eventId, userId)
+      if (event?.approvalMode) return this.requestJoin(eventId, userId, seats)
+      if (event && !fits(event, seats)) {
+        return this.joinWaitlist(eventId, userId, seats)
       }
-      return this.rsvp(eventId, userId)
+      return this.rsvp(eventId, userId, seats)
     },
 
-    async requestJoin(eventId, userId) {
-      const event = await requestJoin(eventId, userId)
+    async requestJoin(eventId, userId, seats = 1) {
+      const event = await requestJoin(eventId, userId, seats)
       this._patch(event)
       const notifStore = useNotifStore()
       notifStore.flash(`📨 Request sent for "${event.title}" — the host will review it`)
@@ -341,11 +354,13 @@ export const useEventStore = defineStore('events', {
      * events hold the payment; approval events keep it pending until the
      * host approves.
      */
-    async payAndJoin(eventId, userId, amount) {
+    async payAndJoin(eventId, userId, amount, seats = 1) {
       const event = this.events.find((e) => e.id === eventId)
       const status = event?.approvalMode ? 'pending' : 'held_in_escrow'
+      // `amount` is the total the member was shown and agreed to, already
+      // multiplied by the party size in the checkout sheet
       await recordPayment(eventId, userId, amount, status)
-      return this.smartJoin(eventId, userId)
+      return this.smartJoin(eventId, userId, seats)
     },
 
     async markAttendance(eventId, hostId, noShowIds) {

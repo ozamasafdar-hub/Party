@@ -1,3 +1,4 @@
+import { peopleGoing } from '@/utils/seats'
 import L from 'leaflet'
 import { categoryOf, pinColorOf } from '@/config/categories'
 
@@ -47,7 +48,7 @@ export function buildEventIcon(
   const { glyph } = categoryOf(event.category)
   const featured = !!event.featuredPin
   const badgeColor = full ? '#f4587a' : '#2dd4a0'
-  const count = event.attendeeIds.length
+  const count = peopleGoing(event)
   const stroke = selected ? '#ffffff' : friend ? '#d4af6a' : 'rgba(255,255,255,0.85)'
   const strokeWidth = selected ? 3 : friend ? 2.5 : 1.5
 

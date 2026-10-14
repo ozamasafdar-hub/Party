@@ -99,7 +99,7 @@ run_suite() {
 
 # refresh.sql ages the bot events, so it runs last — the suites before it
 # expect the seeded dates as the seed laid them down.
-out="$(run_suite "$HERE/gates.sql"; run_suite "$HERE/gender.sql"; run_suite "$HERE/leaving.sql"; run_suite "$HERE/refresh.sql")"
+out="$(run_suite "$HERE/gates.sql"; run_suite "$HERE/gender.sql"; run_suite "$HERE/leaving.sql"; run_suite "$HERE/seats.sql"; run_suite "$HERE/refresh.sql")"
 echo "$out"
 echo
 if echo "$out" | grep -qE "FAIL|ERROR"; then
