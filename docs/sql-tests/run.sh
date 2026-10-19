@@ -99,6 +99,21 @@ run_suite() {
 
 # refresh.sql ages the bot events, so it runs last — the suites before it
 # expect the seeded dates as the seed laid them down.
+# verify-live.sql is the script handed to the user for the Supabase editor,
+# so it runs FIRST — before anything below mutates the data it inspects —
+# and purely to prove it executes. A syntax error in a file somebody pastes
+# into production is a wasted evening, and this is the only place it can be
+# caught before they find it.
+echo
+echo "VERIFY-LIVE.SQL (the script you paste into Supabase)"
+verify_out="$(run_suite "$HERE/verify-live.sql")"
+echo "$verify_out" | sed 's/^/  /'
+if echo "$verify_out" | grep -qE "ERROR|FAIL"; then
+  echo
+  echo "verify-live.sql does not run cleanly against a fresh database."
+  exit 1
+fi
+
 out="$(run_suite "$HERE/gates.sql"; run_suite "$HERE/gender.sql"; run_suite "$HERE/leaving.sql"; run_suite "$HERE/seats.sql"; run_suite "$HERE/refresh.sql")"
 echo "$out"
 echo

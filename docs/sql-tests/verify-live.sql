@@ -166,6 +166,51 @@ with checks(sort, label, ok) as (
   select 23, 'members who have left: ' ||
              (select count(*)::text from public.profiles where deleted_at is not null),
          true
+
+  -- Migration 015: one RSVP can bring several people
+  union all
+  select 24, 'an RSVP can hold several places           (migration 015)',
+         exists (
+           select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'rsvps'
+              and column_name = 'seats'
+         )
+
+  union all
+  select 25, 'capacity counts people, not rows',
+         pg_get_functiondef(p.oid) like '%sum(seats)%'
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'enforce_event_capacity'
+
+  union all
+  -- The one that would quietly oversell an event: promoting a party too
+  -- big for the gap raises inside an after-delete trigger and takes the
+  -- delete with it, so leaving an event would fail
+  select 26, 'the waitlist promotes only a party that fits',
+         pg_get_functiondef(p.oid) like '%seats <= cap - taken%'
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'promote_from_waitlist'
+
+  union all
+  select 27, 'women-only events stay one place per member',
+         pg_get_functiondef(p.oid) like '%LADIES_ONLY_SEATS%'
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'enforce_event_capacity'
+
+  union all
+  select 28, 'there is one way in, so seats cannot drift',
+         exists (
+           select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = 'public' and p.proname = 'book_seats'
+         )
+
+  union all
+  -- Informational: how lively the map looks to somebody opening it now
+  select 29, 'events on the map right now: ' ||
+             (select count(*)::text from public.events
+               where not coalesce(is_cancelled, false)
+                 and starts_at + make_interval(mins => duration_minutes) > now()),
+         true
 )
 select case when ok then 'PASS' else 'FAIL' end as result, label
   from checks
